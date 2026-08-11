@@ -124,3 +124,23 @@ afterEvaluate {
         enabled = false
     }
 }
+tasks.whenTaskAdded {
+    if (name.contains("generatePluginRegistrant")) {
+        enabled = false
+    }
+}
+tasks.configureEach {
+    if (name.contains("generatePluginRegistrant", ignoreCase = true)) {
+        enabled = false
+    }
+}
+// Cancella il GeneratedPluginRegistrant generato automaticamente in src/main
+// prima che parta la compilazione Java dei singoli flavor
+tasks.matching { it.name.startsWith("compile") && it.name.endsWith("JavaWithJavac") }.configureEach {
+    doFirst {
+        val defaultRegistrant = file("src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java")
+        if (defaultRegistrant.exists()) {
+            defaultRegistrant.delete()
+        }
+    }
+}
