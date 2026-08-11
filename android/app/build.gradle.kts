@@ -89,11 +89,19 @@ flutter {
 }
 
 dependencies {
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.0")
 
     // Firebase/FCM: solo per il flavor playstore
-    "playstoreImplementation"(platform("com.google.firebase:firebase-bom:33.0.0"))
+    "playstoreImplementation"(platform("com.google.firebase:firebase-bom:33.16.0"))
     "playstoreImplementation"("com.google.firebase:firebase-messaging")
+}
+
+// Esclude le librerie Firebase/GMS da TUTTE le configurazioni del flavor fdroid
+// Garantisce che l'APK F-Droid sia privo di qualsiasi bytecode Google Firebase
+configurations.matching { it.name.startsWith("fdroid") }.configureEach {
+    exclude(group = "com.google.firebase")
+    exclude(group = "com.google.android.gms")
+    exclude(group = "com.google.android.datatransport")
 }
 
 configurations.all {
