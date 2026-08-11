@@ -113,3 +113,14 @@ configurations.all {
 if (gradle.startParameter.taskNames.any { it.contains("playstore", ignoreCase = true) }) {
     apply(plugin = "com.google.gms.google-services")
 }
+
+// Disabilita la generazione automatica di GeneratedPluginRegistrant da parte di Flutter.
+// Forniamo i registranti manualmente nei source set fdroid e playstore per garantire
+// che la build F-Droid non contenga alcun riferimento a classi Firebase.
+afterEvaluate {
+    tasks.matching {
+        it.name.startsWith("generatePlugin") && it.name.endsWith("RegistrantFile")
+    }.configureEach {
+        enabled = false
+    }
+}

@@ -5,6 +5,9 @@ gradle-wrapper.jar
 /gradlew.bat
 /local.properties
 GeneratedPluginRegistrant.java
+# Track the manually-maintained flavor-specific registrants (override the rule above)
+!**/src/fdroid/**/GeneratedPluginRegistrant.java
+!**/src/playstore/**/GeneratedPluginRegistrant.java
 .cxx/
 
 # Remember to never publicly share your keystore.
