@@ -1,0 +1,77 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# VS Code related
+.vscode/
+.clinerules
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+
+# Flutter ephemeral / generated files
+**/flutter/ephemeral/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio build artifacts
+/android/app/debug
+/android/app/profile
+/android/app/release
+**/local.properties
+**/flutter-plugins.gradle
+**/*.apk
+**/*.aab
+
+# Node.js (Server)
+server/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+
+# Server runtime database (auto-generated, contains user data)
+server/server_db.json
+
+# Secrets and Credentials — NEVER commit these
+**/google-services.json
+**/*-firebase-adminsdk-*.json
+**/*firebase-adminsdk*.json
+**/*-service-account.json
+**/firebase-service-account.json
+android/key.properties
+**/*.keystore
+**/*.jks
+*.pem
+*.key
+.env
+.env.*
+
+# Archive
+server.tar
