@@ -36,7 +36,7 @@
 
         <!-- Servizio in background per aggiornamento posizione GPS -->
         <service
-            android:name="de.julianassmann.flutter_background.BackgroundService"
+            android:name="com.transistorsoft.flutter.backgroundfetch.BackgroundFetchService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="location"

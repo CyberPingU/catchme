@@ -1,6 +1,7 @@
 // dart:io non più necessario — SSL override rimosso
 import 'package:flutter/material.dart';
-import 'package:flutter_background/flutter_background.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_background_service/flutter_background_service.dart' show ServiceInstance;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'screens/main_navigation_screen.dart';
@@ -56,6 +57,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Eseguito in un Dart isolate separato. FCM mostra la notifica automaticamente.
 }
 
+@pragma('vm:entry-point')
+Future<void> onStart(ServiceInstance service) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  service.invoke('setAsForegroundService');
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -69,20 +77,22 @@ void main() async {
     }
   }
   
-  // Inizializza il servizio in background (senza abilitarlo subito)
-  // Inizializza il servizio in background (senza abilitarlo subito)
+  // Inizializza il servizio in background per tracciamento GPS
   try {
-    final androidConfig = FlutterBackgroundAndroidConfig(
-      notificationTitle: 'CatchMe Attivo',
-      notificationText: 'Invio della posizione in background',
-      notificationImportance: AndroidNotificationImportance.normal,
-      notificationIcon: AndroidResource(name: 'ic_launcher', defType: 'mipmap'),
+    final service = FlutterBackgroundService();
+    await service.configure(
+      androidConfiguration: AndroidConfiguration(
+        onStart: onStart,
+        isForegroundMode: true,
+        notificationChannelId: 'catchme_gps_tracking',
+        initialNotificationTitle: 'CatchMe Attivo',
+        initialNotificationContent: 'Tracciamento GPS in corso',
+        foregroundServiceNotificationId: 1,
+      ),
+      iosConfiguration: IosConfiguration(),
     );
-    
-    await FlutterBackground.initialize(androidConfig: androidConfig);
-    // NON chiamare enableBackgroundExecution qui - verrà fatto dopo i permessi
   } catch (e) {
-    print('Errore inizializzazione FlutterBackground: $e');
+    print('Errore inizializzazione FlutterBackgroundService: $e');
   }
   
   runApp(const CatchMeApp());

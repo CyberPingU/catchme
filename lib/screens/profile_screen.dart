@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_background/flutter_background.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import '../models/user_profile.dart';
 import '../services/storage_service.dart';
 import '../services/auth_service.dart';
@@ -150,10 +150,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (value) {
         final hasPermissions = await _bluetoothService.requestPermissions();
         if (hasPermissions) {
-          await FlutterBackground.enableBackgroundExecution();
+          FlutterBackgroundService().invoke('startService');
         }
       } else {
-        await FlutterBackground.disableBackgroundExecution();
+        FlutterBackgroundService().invoke('stopService');
       }
     } catch (e) {
       print('Errore impostazione background execution: $e');

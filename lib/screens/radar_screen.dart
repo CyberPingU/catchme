@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_background/flutter_background.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/nearby_user.dart';
 import '../models/user_profile.dart';
@@ -120,13 +120,13 @@ class _RadarScreenState extends State<RadarScreen> with WidgetsBindingObserver {
     
     if (isBgSyncEnabled) {
       try {
-        await FlutterBackground.enableBackgroundExecution();
+        FlutterBackgroundService().invoke('startService');
       } catch (e) {
         print('Errore attivazione background: $e');
       }
     } else {
       try {
-        await FlutterBackground.disableBackgroundExecution();
+        FlutterBackgroundService().invoke('stopService');
       } catch (_) {}
     }
 
