@@ -48,6 +48,10 @@ android {
                 // Fallback: firma debug (solo per test, non per distribuzione)
                 signingConfig = signingConfigs.getByName("debug")
             }
+            
+            // Disabilita R8 per evitare problemi di compatibilità
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 
@@ -70,6 +74,8 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        apiVersion = org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2
+        languageVersion = org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2
     }
 }
 
