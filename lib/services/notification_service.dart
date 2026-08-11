@@ -142,6 +142,25 @@ class NotificationService {
     );
   }
 
+  /// Metodo generico per mostrare una notifica locale (usato da push service)
+  Future<void> showNotification(String title, String body, {String? payload}) async {
+    const androidDetails = AndroidNotificationDetails(
+      'catchme_push',
+      'Push Notifications',
+      channelDescription: 'Notifiche push ricevute',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+    const details = NotificationDetails(android: androidDetails);
+    await _notifications.show(
+      DateTime.now().millisecondsSinceEpoch % 100000,
+      title,
+      body,
+      details,
+      payload: payload,
+    );
+  }
+
   Future<void> cancelForegroundNotification() async {
     await _notifications.cancel(1);
   }

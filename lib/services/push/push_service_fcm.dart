@@ -1,7 +1,6 @@
 // Implementazione FCM per Play Store
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:unifiedpush/unifiedpush.dart';
 import 'push_service_interface.dart';
@@ -21,7 +20,7 @@ class PushServiceFCM implements PushServiceInterface {
 
   @override
   bool get upFailed => _upFailed;
-  
+
   @override
   set upFailed(bool value) {
     _upFailed = value;
@@ -78,7 +77,7 @@ class PushServiceFCM implements PushServiceInterface {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       final payload = message.data['payload'];
       if (payload != null) {
-        await _notificationService.showPushNotification(
+        await _notificationService.showNotification(
           'Nuovo messaggio',
           'Hai ricevuto un nuovo messaggio',
           payload: payload,
@@ -121,31 +120,30 @@ class PushServiceFCM implements PushServiceInterface {
     await FirebaseMessaging.instance.deleteToken();
   }
 
-  // Callback UnifiedPush
-  Future<void> _onUnifiedPushEndpoint(PushEndpoint endpoint, String instance) async {
-    final endpointUrl = endpoint.url;
-    debugPrint('[PushServiceFCM] Nuovo endpoint UnifiedPush ricevuto: $endpointUrl');
+  // Callback UnifiedPush — le firme devono essere void Function(...) per UP
+  void _onUnifiedPushEndpoint(PushEndpoint endpoint, String instance) {
+    debugPrint('[PushServiceFCM] Nuovo endpoint UnifiedPush: ${endpoint.url}');
   }
 
-  Future<void> _onUnifiedPushFailed(String instance) async {
-    debugPrint('[PushServiceFCM] Registrazione UnifiedPush fallita');
+  void _onUnifiedPushFailed(FailedReason reason, String instance) {
+    debugPrint('[PushServiceFCM] Registrazione UnifiedPush fallita: $reason');
     _upFailed = true;
   }
 
-  Future<void> _onUnifiedPushUnregistered(String instance) async {
+  void _onUnifiedPushUnregistered(String instance) {
     debugPrint('[PushServiceFCM] UnifiedPush deregistrato');
   }
 
-  Future<void> _onUnifiedPushMessage(String message, String instance) async {
-    debugPrint('[PushServiceFCM] Messaggio UnifiedPush ricevuto: $message');
-    
+  void _onUnifiedPushMessage(PushMessage message, String instance) {
+    debugPrint('[PushServiceFCM] Messaggio UnifiedPush ricevuto');
     try {
-      final payload = jsonDecode(message)['payload'];
+      final raw = utf8.decode(message.content);
+      final payload = jsonDecode(raw)['payload'];
       if (payload != null) {
-        await _notificationService.showPushNotification(
+        _notificationService.showNotification(
           'Nuovo messaggio',
           'Hai ricevuto un nuovo messaggio',
-          payload: payload,
+          payload: payload.toString(),
         );
       }
     } catch (e) {
@@ -154,7 +152,6 @@ class PushServiceFCM implements PushServiceInterface {
   }
 
   void _handlePushPayload(String payload) {
-    // Gestisci il payload della notifica
     debugPrint('[PushServiceFCM] Payload ricevuto: $payload');
   }
 }
