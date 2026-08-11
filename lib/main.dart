@@ -18,6 +18,11 @@ import 'services/push_service.dart';
 const _pushProvider = String.fromEnvironment('PUSH_PROVIDER', defaultValue: 'fcm');
 const _useFcm = _pushProvider != 'unifiedpush';
 
+// Factory per PushService basata su PUSH_PROVIDER
+PushServiceInterface createPushService() {
+  return PushService(); // Usa l'implementazione esistente che gestisce già la logica condizionale
+}
+
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void openChatScreen(String senderHash, {String? defaultNickname}) async {
