@@ -1,0 +1,79 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'   # Si attiva su tag tipo v1.0.0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.x'
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      # ── Keystore (per tutti i flavor) ──────────────────────────────────────
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/catchme-release.jks
+
+      - name: Create key.properties
+        run: |
+          cat > android/key.properties << EOF
+          storePassword=${{ secrets.KEY_STORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=catchme
+          storeFile=../catchme-release.jks
+          EOF
+
+      # ── Build FOSS (fdroid) — nessun Firebase ─────────────────────────────
+      - name: Build fdroid APK
+        run: |
+          flutter build apk \
+            --release \
+            --flavor fdroid \
+            --dart-define=PUSH_PROVIDER=unifiedpush
+
+      - name: Rename fdroid APK
+        run: |
+          mv build/app/outputs/flutter-apk/app-fdroid-release.apk \
+             build/app/outputs/flutter-apk/catchme-fdroid-${{ github.ref_name }}.apk
+
+      # ── Build full (playstore) — con Firebase ─────────────────────────────
+      - name: Write google-services.json
+        run: |
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
+
+      - name: Build playstore APK
+        run: |
+          flutter build apk \
+            --release \
+            --flavor playstore \
+            --dart-define=PUSH_PROVIDER=fcm
+
+      - name: Rename playstore APK
+        run: |
+          mv build/app/outputs/flutter-apk/app-playstore-release.apk \
+             build/app/outputs/flutter-apk/catchme-full-${{ github.ref_name }}.apk
+
+      # ── Pubblica entrambi gli APK nella GitHub Release ────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/app/outputs/flutter-apk/catchme-fdroid-${{ github.ref_name }}.apk
+            build/app/outputs/flutter-apk/catchme-full-${{ github.ref_name }}.apk
+          generate_release_notes: true
