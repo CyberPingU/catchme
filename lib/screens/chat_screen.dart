@@ -9,7 +9,6 @@ import '../services/proximity_service.dart';
 import '../services/storage_service.dart';
 import '../services/crypto_service.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -218,30 +217,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 final picked = await picker.pickImage(source: ImageSource.camera);
                 if (picked != null) {
                   await _sendAttachment(File(picked.path), MessageType.image);
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.insert_drive_file),
-              title: const Text('Documento / File'),
-              onTap: () async {
-                Navigator.pop(context);
-                try {
-                  final result = await FilePicker.pickFiles(type: FileType.any);
-                  if (result != null && result.files.single.path != null) {
-                    await _sendAttachment(
-                      File(result.files.single.path!),
-                      MessageType.file,
-                      customFileName: result.files.single.name,
-                    );
-                  }
-                } catch (e) {
-                  print('[ChatScreen] Errore selezione file: $e');
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Errore selezione file: $e')),
-                    );
-                  }
                 }
               },
             ),

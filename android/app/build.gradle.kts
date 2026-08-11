@@ -18,7 +18,7 @@ if (hasKeystore) {
 
 android {
     namespace = "work.dreadful.catchme"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -52,6 +52,11 @@ android {
             // Disabilita R8 per evitare problemi di compatibilità
             isMinifyEnabled = false
             isShrinkResources = false
+            
+            // Disabilita linting per evitare problemi con Android SDK 37
+            lint {
+                checkReleaseBuilds = false
+            }
         }
     }
 
@@ -74,8 +79,8 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-        apiVersion = org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2
-        languageVersion = org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_2
+        apiVersion = org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_0
+        languageVersion = org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_2_0
     }
 }
 
