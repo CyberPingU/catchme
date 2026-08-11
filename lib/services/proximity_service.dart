@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:image/image.dart' as img;
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -719,14 +719,19 @@ class ProximityService {
     final String fileName = customFileName ?? file.path.split('/').last;
 
     if (type == MessageType.image) {
-      // Comprimi se è un'immagine prima di cifrarla
-      final compressed = await FlutterImageCompress.compressWithFile(
-        file.absolute.path,
-        minWidth: 1024,
-        minHeight: 1024,
-        quality: 75,
-      );
-      fileBytes = compressed ?? await file.readAsBytes();
+      // Comprimi se è un'immagine prima di cifrarla usando la libreria image
+      final originalBytes = await file.readAsBytes();
+      final originalImage = img.decodeImage(originalBytes);
+      
+      if (originalImage != null) {
+        // Ridimensiona l'immagine se troppo grande
+        final resizedImage = img.copyResize(originalImage, width: 1024, height: 1024);
+        // Comprimi con qualità 75%
+        final compressedBytes = img.encodeJpg(resizedImage, quality: 75);
+        fileBytes = compressedBytes;
+      } else {
+        fileBytes = originalBytes;
+      }
     } else {
       fileBytes = await file.readAsBytes();
     }

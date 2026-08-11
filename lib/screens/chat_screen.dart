@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:image/image.dart' as img;
 import '../models/nearby_user.dart';
 import '../models/chat_message.dart';
 import '../services/proximity_service.dart';
@@ -427,16 +427,16 @@ class _ChatScreenState extends State<ChatScreen> {
         throw Exception('File foto non trovato');
       }
 
-      // Comprimi l'immagine a 120x120 pixel
-      final compressedBytes = await FlutterImageCompress.compressWithFile(
-        file.absolute.path,
-        minWidth: 120,
-        minHeight: 120,
-        quality: 85,
-      );
-
-      if (compressedBytes == null) {
-        throw Exception('Errore nella compressione dell\'immagine');
+      // Comprimi l'immagine a 120x120 pixel usando la libreria image
+      final originalBytes = await file.readAsBytes();
+      final originalImage = img.decodeImage(originalBytes);
+      
+      List<int> compressedBytes;
+      if (originalImage != null) {
+        final resizedImage = img.copyResize(originalImage, width: 120, height: 120);
+        compressedBytes = img.encodeJpg(resizedImage, quality: 85);
+      } else {
+        throw Exception('Impossibile decodificare l\'immagine');
       }
 
       // Converti in Base64

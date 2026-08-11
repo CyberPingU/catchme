@@ -70,6 +70,7 @@ void main() async {
   }
   
   // Inizializza il servizio in background (senza abilitarlo subito)
+  // Inizializza il servizio in background (senza abilitarlo subito)
   try {
     final androidConfig = FlutterBackgroundAndroidConfig(
       notificationTitle: 'CatchMe Attivo',
