@@ -200,7 +200,8 @@ class _ChatScreenState extends State<ChatScreen> {
               leading: const Icon(Icons.photo_library),
               title: const Text('Galleria Immagini'),
               onTap: () async {
-                Navigator.pop(context);
+                final navigator = Navigator.of(context);
+                navigator.pop();
                 final picker = ImagePicker();
                 final picked = await picker.pickImage(source: ImageSource.gallery);
                 if (picked != null) {
@@ -212,7 +213,8 @@ class _ChatScreenState extends State<ChatScreen> {
               leading: const Icon(Icons.photo_camera),
               title: const Text('Scatta Foto'),
               onTap: () async {
-                Navigator.pop(context);
+                final navigator = Navigator.of(context);
+                navigator.pop();
                 final picker = ImagePicker();
                 final picked = await picker.pickImage(source: ImageSource.camera);
                 if (picked != null) {
@@ -254,7 +256,7 @@ class _ChatScreenState extends State<ChatScreen> {
       // Ricarica la cronologia locale della chat per mostrare il messaggio inserito
       await _loadChatHistory();
     } catch (e) {
-      print('[ChatScreen] Errore invio allegato: $e');
+      debugPrint('[ChatScreen] Errore invio allegato: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Errore invio: $e')),
@@ -286,7 +288,7 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       }
     } catch (e) {
-      print('Errore invio messaggi pendenti: $e');
+      debugPrint('Errore invio messaggi pendenti: $e');
     } finally {
       _isSendingPending = false;
     }
@@ -508,14 +510,13 @@ class _ChatScreenState extends State<ChatScreen> {
               tooltip: 'Revoca Condivisione Posizione',
               onPressed: () async {
                 await widget.bluetoothService.revokeLocationSharing(_permanentId);
+                if (!mounted) return;
                 setState(() {
                   _isLocationShared = false;
                 });
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Condivisione posizione revocata')),
-                  );
-                }
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Condivisione posizione revocata')),
+                );
               },
             ),
           IconButton(
@@ -524,11 +525,10 @@ class _ChatScreenState extends State<ChatScreen> {
             onPressed: _currentNearbyUser != null && _currentNearbyUser!.isConnected
                 ? () async {
                     await widget.bluetoothService.sendLocationRequest(_permanentId);
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Richiesta posizione inviata')),
-                      );
-                    }
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Richiesta posizione inviata')),
+                    );
                   }
                 : null,
           ),
@@ -540,14 +540,14 @@ class _ChatScreenState extends State<ChatScreen> {
           PopupMenuButton<String>(
             onSelected: (value) async {
               if (value == 'block') {
+                final navigator = Navigator.of(context);
                 await _storageService.addBlockedUser(_permanentId);
                 await widget.bluetoothService.revokeLocationSharing(_permanentId);
-                if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Contatto bloccato')),
-                  );
-                }
+                if (!mounted) return;
+                navigator.pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Contatto bloccato')),
+                );
               }
             },
             itemBuilder: (context) => [
@@ -603,8 +603,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                     style: TextStyle(
                                       fontSize: 10,
                                       color: message.isSent
-                                          ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.6)
-                                          : Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                                          ? Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.6)
+                                          : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
                                     ),
                                   ),
                                   if (message.isSent) ...[
@@ -831,8 +831,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       style: TextStyle(
                         fontSize: 10,
                         color: message.isSent
-                            ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.7)
-                            : Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                            ? Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.7)
+                            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
                   ],

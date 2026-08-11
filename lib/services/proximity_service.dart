@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:image/image.dart' as img;
 import 'package:geolocator/geolocator.dart';
@@ -64,46 +65,46 @@ class ProximityService {
     }
     
     if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-      print('[DEBUG-CATCHME] Permessi posizione negati: $permission');
+      debugPrint('[DEBUG-CATCHME] Permessi posizione negati: $permission');
       return false;
     }
     
     final notificationsGranted = notificationStatus.isGranted;
-    print('[DEBUG-CATCHME] Risultati permessi: posizione=$permission, notifiche=$notificationsGranted');
+    debugPrint('[DEBUG-CATCHME] Risultati permessi: posizione=$permission, notifiche=$notificationsGranted');
     
     return notificationsGranted;
   }
 
   void connectToServer() {
     if (_channel != null) {
-      print('[DEBUG-CATCHME] connectToServer(): canale già aperto, skip.');
+      debugPrint('[DEBUG-CATCHME] connectToServer(): canale già aperto, skip.');
       return;
     }
 
     const url = _serverUrl;
-    print('[DEBUG-CATCHME] connectToServer(): avvio connessione a $url ...');
+    debugPrint('[DEBUG-CATCHME] connectToServer(): avvio connessione a $url ...');
     try {
       _reconnectTimer?.cancel();
       _channel = WebSocketChannel.connect(Uri.parse(url));
       _isConnected = true;
       _notifyUsersUpdate();
-      print('[DEBUG-CATCHME] connectToServer(): WebSocket creato, in attesa di dati...');
+      debugPrint('[DEBUG-CATCHME] connectToServer(): WebSocket creato, in attesa di dati...');
 
       _channel!.stream.listen(
         (message) => _handleServerMessage(message),
         onError: (e) {
-          print('[DEBUG-CATCHME] Errore WebSocket: $e');
+          debugPrint('[DEBUG-CATCHME] Errore WebSocket: $e');
           _onConnectionLost();
         },
         onDone: () {
-          print('[DEBUG-CATCHME] Connessione WebSocket chiusa dal server');
+          debugPrint('[DEBUG-CATCHME] Connessione WebSocket chiusa dal server');
           _onConnectionLost();
         },
       );
 
       _registerWithServer();
     } catch (e) {
-      print('[DEBUG-CATCHME] Errore avvio connessione WebSocket: $e');
+      debugPrint('[DEBUG-CATCHME] Errore avvio connessione WebSocket: $e');
       _isConnected = false;
       _onConnectionLost();
     }
@@ -135,33 +136,33 @@ class ProximityService {
   }
 
   Future<void> _registerWithServer() async {
-    print('[DEBUG-CATCHME] _registerWithServer(): isConnected=$_isConnected, hasChannel=${_channel != null}, hasProfile=${_currentProfile != null}');
+    debugPrint('[DEBUG-CATCHME] _registerWithServer(): isConnected=$_isConnected, hasChannel=${_channel != null}, hasProfile=${_currentProfile != null}');
     if (!_isConnected || _channel == null || _currentProfile == null) {
-      print('[DEBUG-CATCHME] _registerWithServer(): ABORTITO - condizioni non soddisfatte.');
+      debugPrint('[DEBUG-CATCHME] _registerWithServer(): ABORTITO - condizioni non soddisfatte.');
       return;
     }
 
     final publicKey = _cryptoService.publicKey;
     final publicKeyHash = publicKey != null ? _cryptoService.getPublicKeyHash(publicKey) : '';
-    print('[DEBUG-CATCHME] _registerWithServer(): publicKeyHash=$publicKeyHash');
+    debugPrint('[DEBUG-CATCHME] _registerWithServer(): publicKeyHash=$publicKeyHash');
 
     // Recupera la posizione passata o l'ultima nota in modo ISTANTANEO (evita ritardi di lock GPS)
     Position? pos;
     try {
-      print('[DEBUG-CATCHME] _registerWithServer(): recupero last known GPS...');
+      debugPrint('[DEBUG-CATCHME] _registerWithServer(): recupero last known GPS...');
       pos = await Geolocator.getLastKnownPosition();
-      print('[DEBUG-CATCHME] _registerWithServer(): Last known GPS -> ${pos?.latitude}, ${pos?.longitude}');
+      debugPrint('[DEBUG-CATCHME] _registerWithServer(): Last known GPS -> ${pos?.latitude}, ${pos?.longitude}');
     } catch (e) {
-      print('[DEBUG-CATCHME] Errore recupero last known GPS: $e');
+      debugPrint('[DEBUG-CATCHME] Errore recupero last known GPS: $e');
     }
 
     String? fcmToken;
     try {
-      print('[DEBUG-CATCHME] _registerWithServer(): recupero FCM token...');
+      debugPrint('[DEBUG-CATCHME] _registerWithServer(): recupero FCM token...');
       fcmToken = await PushService().getFCMToken();
-      print('[DEBUG-CATCHME] FCM Token: $fcmToken');
+      debugPrint('[DEBUG-CATCHME] FCM Token: $fcmToken');
     } catch (e) {
-      print('[DEBUG-CATCHME] Errore recupero FCM token: $e');
+      debugPrint('[DEBUG-CATCHME] Errore recupero FCM token: $e');
     }
 
     final sharingWith = await _getSharingWithList();
@@ -186,9 +187,9 @@ class ProximityService {
       }
     };
 
-    print('[DEBUG-CATCHME] _registerWithServer(): invio payload registrazione istantanea...');
+    debugPrint('[DEBUG-CATCHME] _registerWithServer(): invio payload registrazione istantanea...');
     _channel?.sink.add(jsonEncode(payload));
-    print('[DEBUG-CATCHME] _registerWithServer(): registrazione inviata. Richiedo GPS aggiornato in background...');
+    debugPrint('[DEBUG-CATCHME] _registerWithServer(): registrazione inviata. Richiedo GPS aggiornato in background...');
     
     // Richiedi la posizione GPS ad alta precisione in background senza bloccare la consegna messaggi
     _fetchAndSendCurrentLocation();
@@ -210,10 +211,10 @@ class ProximityService {
           }
         };
         _channel?.sink.add(jsonEncode(payload));
-        print('[DEBUG-CATCHME] GPS aggiornato in background con successo.');
+        debugPrint('[DEBUG-CATCHME] GPS aggiornato in background con successo.');
       }
     } catch (e) {
-      print('[DEBUG-CATCHME] Errore aggiornamento GPS background: $e');
+      debugPrint('[DEBUG-CATCHME] Errore aggiornamento GPS background: $e');
     }
   }
 
@@ -235,7 +236,7 @@ class ProximityService {
       };
       _channel?.sink.add(jsonEncode(payload));
     } catch (e) {
-      print('[DEBUG-CATCHME] Aggiornamento GPS fallito: $e');
+      debugPrint('[DEBUG-CATCHME] Aggiornamento GPS fallito: $e');
     }
   }
 
@@ -255,7 +256,7 @@ class ProximityService {
         _handleMessageDelivered(data);
       }
     } catch (e) {
-      print('[DEBUG-CATCHME] Errore parse messaggio server: $e');
+      debugPrint('[DEBUG-CATCHME] Errore parse messaggio server: $e');
     }
   }
 
@@ -263,7 +264,7 @@ class ProximityService {
     try {
       final String messageId = data['messageId'];
       final String recipientHash = data['recipientHash'];
-      print('[ProximityService] server_ack ricevuto per msg $messageId destinato a $recipientHash');
+      debugPrint('[ProximityService] server_ack ricevuto per msg $messageId destinato a $recipientHash');
       
       await _storageService.updateChatMessageStatus(recipientHash, messageId, MessageStatus.sent);
       
@@ -277,7 +278,7 @@ class ProximityService {
       );
       _messageController.add(updatedMessage);
     } catch (e) {
-      print('[ProximityService] Errore in _handleServerAck: $e');
+      debugPrint('[ProximityService] Errore in _handleServerAck: $e');
     }
   }
 
@@ -285,7 +286,7 @@ class ProximityService {
     try {
       final String messageId = data['messageId'];
       final String recipientHash = data['recipientHash'];
-      print('[ProximityService] msg_delivered (spunta blu) ricevuto per msg $messageId consegnato a $recipientHash');
+      debugPrint('[ProximityService] msg_delivered (spunta blu) ricevuto per msg $messageId consegnato a $recipientHash');
       
       await _storageService.updateChatMessageStatus(recipientHash, messageId, MessageStatus.delivered);
       
@@ -299,7 +300,7 @@ class ProximityService {
       );
       _messageController.add(updatedMessage);
     } catch (e) {
-      print('[ProximityService] Errore in _handleMessageDelivered: $e');
+      debugPrint('[ProximityService] Errore in _handleMessageDelivered: $e');
     }
   }
 
@@ -420,7 +421,7 @@ class ProximityService {
     
     final isBlocked = await _storageService.isUserBlocked(senderHash);
     if (isBlocked) {
-      print('[DEBUG-CATCHME] Ignorato messaggio da utente bloccato: $senderHash');
+      debugPrint('[DEBUG-CATCHME] Ignorato messaggio da utente bloccato: $senderHash');
       return;
     }
  
@@ -479,7 +480,7 @@ class ProximityService {
         }
         decryptedText = await _cryptoService.decryptPayload(encryptedMessage, decryptKey);
       } catch (e) {
-        print('[ProximityService] Errore decifratura: $e');
+        debugPrint('[ProximityService] Errore decifratura: $e');
         decryptedText = '[Messaggio cifrato - Impossibile decifrare]';
         decryptionFailed = true;
       }
@@ -564,7 +565,7 @@ class ProximityService {
           bytes,
         );
       } catch (e) {
-        print('[ProximityService] Errore salvataggio allegato in ingresso: $e');
+        debugPrint('[ProximityService] Errore salvataggio allegato in ingresso: $e');
       }
     } else if (decryptionFailed) {
       parsedType = MessageType.text;
@@ -800,7 +801,7 @@ class ProximityService {
       }
       return false;
     } catch (e) {
-      print('[DEBUG-CATCHME] Errore invio manuale posizione: $e');
+      debugPrint('[DEBUG-CATCHME] Errore invio manuale posizione: $e');
       return false;
     }
   }
@@ -912,13 +913,13 @@ class ProximityService {
     final isBgSyncEnabled = prefs.getBool('background_sync_enabled') ?? true;
     
     if (isBgSyncEnabled) {
-      print('[DEBUG-CATCHME] Sincronizzazione in background attiva. Avvio scansione periodica (5 min).');
+      debugPrint('[DEBUG-CATCHME] Sincronizzazione in background attiva. Avvio scansione periodica (5 min).');
       // Avvia la scansione periodica a basso consumo (es. ogni 5 minuti)
       _gpsTimer = Timer.periodic(const Duration(minutes: 5), (timer) async {
         await _sendBackgroundLocationUpdate();
       });
     } else {
-      print('[DEBUG-CATCHME] Sincronizzazione in background disattivata. Nessuna scansione periodica avviata.');
+      debugPrint('[DEBUG-CATCHME] Sincronizzazione in background disattivata. Nessuna scansione periodica avviata.');
     }
   }
 
@@ -930,7 +931,7 @@ class ProximityService {
       // 2. Connettiti temporaneamente al server
       const url = _serverUrl;
       
-      print('[DEBUG-CATCHME] Connessione temporanea background a: $url');
+      debugPrint('[DEBUG-CATCHME] Connessione temporanea background a: $url');
       final tempChannel = WebSocketChannel.connect(Uri.parse(url));
       
       // 3. Invia pacchetto di registrazione per aggiornare la posizione sul server
@@ -962,9 +963,9 @@ class ProximityService {
       // Lascia un breve ritardo per garantire che il socket invii il pacchetto prima di chiudersi
       await Future.delayed(const Duration(milliseconds: 1000));
       await tempChannel.sink.close();
-      print('[DEBUG-CATCHME] Aggiornamento GPS background completato con successo.');
+      debugPrint('[DEBUG-CATCHME] Aggiornamento GPS background completato con successo.');
     } catch (e) {
-      print('[DEBUG-CATCHME] Errore aggiornamento GPS background: $e');
+      debugPrint('[DEBUG-CATCHME] Errore aggiornamento GPS background: $e');
     }
   }
 

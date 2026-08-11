@@ -66,7 +66,7 @@ class _RadarScreenState extends State<RadarScreen> with WidgetsBindingObserver {
       if (!_isInitialized) {
         // Il profilo è arrivato in ritardo (race condition con _loadProfile).
         // _initialize() aveva abortito perché _profile era null: rilancia ora.
-        print('[DEBUG-CATCHME] didUpdateWidget: profilo arrivato dopo init, rilancio _initialize()');
+        debugPrint('[DEBUG-CATCHME] didUpdateWidget: profilo arrivato dopo init, rilancio _initialize()');
         _initialize();
       } else {
         // Già inizializzato: basta aggiornare il profilo e riavviare advertising
@@ -92,19 +92,19 @@ class _RadarScreenState extends State<RadarScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _initialize() async {
-    print('[DEBUG-CATCHME] _initialize(): avvio. profile=${_profile?.nickname}');
+    debugPrint('[DEBUG-CATCHME] _initialize(): avvio. profile=${_profile?.nickname}');
     await _notificationService.initialize();
     await _bluetoothService.initialize();
 
     if (_profile == null) {
-      print('[DEBUG-CATCHME] _initialize(): profilo null, esco.');
+      debugPrint('[DEBUG-CATCHME] _initialize(): profilo null, esco.');
       if (mounted) setState(() {});
       return;
     }
 
-    print('[DEBUG-CATCHME] _initialize(): richiedo permessi...');
+    debugPrint('[DEBUG-CATCHME] _initialize(): richiedo permessi...');
     final hasPermissions = await _bluetoothService.requestPermissions();
-    print('[DEBUG-CATCHME] _initialize(): hasPermissions=$hasPermissions');
+    debugPrint('[DEBUG-CATCHME] _initialize(): hasPermissions=$hasPermissions');
     if (!hasPermissions) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -122,7 +122,7 @@ class _RadarScreenState extends State<RadarScreen> with WidgetsBindingObserver {
       try {
         FlutterBackgroundService().invoke('startService');
       } catch (e) {
-        print('Errore attivazione background: $e');
+        debugPrint('Errore attivazione background: $e');
       }
     } else {
       try {
@@ -130,12 +130,12 @@ class _RadarScreenState extends State<RadarScreen> with WidgetsBindingObserver {
       } catch (_) {}
     }
 
-    print('[DEBUG-CATCHME] _initialize(): startAdvertising...');
+    debugPrint('[DEBUG-CATCHME] _initialize(): startAdvertising...');
     await _bluetoothService.startAdvertising(_profile!);
     await _bluetoothService.startDiscovery();
 
     _isInitialized = true;
-    print('[DEBUG-CATCHME] _initialize(): COMPLETATO. Connessione server avviata.');
+    debugPrint('[DEBUG-CATCHME] _initialize(): COMPLETATO. Connessione server avviata.');
 
     _bluetoothService.discoveredUsers.listen((users) async {
       setState(() => _nearbyUsers = users);

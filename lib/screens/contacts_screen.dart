@@ -139,40 +139,6 @@ class _ContactsScreenState extends State<ContactsScreen> {
     }
   }
 
-  Future<void> _deleteContact(Contact contact) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Elimina Contatto'),
-        content: Text('Vuoi eliminare ${contact.nickname} dalla rubrica? Verranno eliminati anche tutti i messaggi.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annulla'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Elimina', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      // Elimina il contatto
-      await _storageService.removeContact(contact.id);
-      // Revoca condivisione posizione se era attiva
-      await _bluetoothService.revokeLocationSharing(contact.id);
-      // Elimina la cronologia dei messaggi
-      await _storageService.deleteChatHistory(contact.id);
-      await _loadContacts();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Contatto e messaggi eliminati')),
-        );
-      }
-    }
-  }
 
   Future<void> _addNewGroup() async {
     final controller = TextEditingController();
@@ -360,9 +326,9 @@ class _ContactsScreenState extends State<ContactsScreen> {
                   final contactsInGroup = _contacts.where((c) => c.group == groupName).toList();
                   
                   return DragTarget<Contact>(
-                    onWillAccept: (data) => data != null && data.group != groupName,
-                    onAccept: (contact) {
-                      _moveContactToGroup(contact, groupName);
+                    onWillAcceptWithDetails: (details) => details.data.group != groupName,
+                    onAcceptWithDetails: (details) {
+                      _moveContactToGroup(details.data, groupName);
                       setState(() {
                         _draggedOverGroup = null;
                       });
@@ -410,7 +376,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey.withOpacity(0.2),
+                                  color: Colors.grey.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
@@ -466,7 +432,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
                                   final contactTile = Card(
                                     elevation: 0,
                                     margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    color: Theme.of(context).cardColor.withOpacity(0.5),
+                                    color: Theme.of(context).cardColor.withValues(alpha: 0.5),
                                     child: ListTile(
                                       leading: GestureDetector(
                                         onTap: () => _showUserProfile(contact),
@@ -569,16 +535,16 @@ class _ContactsScreenState extends State<ContactsScreen> {
                                         );
                                       },
                                       onDismissed: (direction) async {
+                                        final scaffoldMessenger = ScaffoldMessenger.of(context);
                                         await _storageService.removeContact(contact.id);
                                         await _bluetoothService.revokeLocationSharing(contact.id);
                                         await _storageService.deleteChatHistory(contact.id);
                                         await _loadContacts();
-                                        if (mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                                content: Text('${contact.nickname} e messaggi eliminati')),
-                                          );
-                                        }
+                                        if (!mounted) return;
+                                        scaffoldMessenger.showSnackBar(
+                                          SnackBar(
+                                              content: Text('${contact.nickname} e messaggi eliminati')),
+                                        );
                                       },
                                       child: contactTile,
                                     ),

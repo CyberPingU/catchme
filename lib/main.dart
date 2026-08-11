@@ -72,7 +72,7 @@ void main() async {
     try {
       await Firebase.initializeApp();
     } catch (e) {
-      print('Errore inizializzazione Firebase: $e');
+      debugPrint('Errore inizializzazione Firebase: $e');
     }
   }
   
@@ -92,7 +92,7 @@ void main() async {
       iosConfiguration: IosConfiguration(),
     );
   } catch (e) {
-    print('Errore inizializzazione FlutterBackgroundService: $e');
+    debugPrint('Errore inizializzazione FlutterBackgroundService: $e');
   }
   
   runApp(const CatchMeApp());
@@ -248,12 +248,12 @@ class _AppInitializerState extends State<AppInitializer> {
                     width: 96,
                     height: 96,
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
+                      color: Colors.blue.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.blueAccent, width: 2),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.blueAccent.withOpacity(0.3),
+                          color: Colors.blueAccent.withValues(alpha: 0.3),
                           blurRadius: 20,
                           spreadRadius: 2,
                         ),

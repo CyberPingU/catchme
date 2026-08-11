@@ -156,7 +156,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         FlutterBackgroundService().invoke('stopService');
       }
     } catch (e) {
-      print('Errore impostazione background execution: $e');
+      debugPrint('Errore impostazione background execution: $e');
     }
   }
 
@@ -521,13 +521,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 trailing: IconButton(
                                   icon: const Icon(Icons.delete, color: Colors.red),
                                   onPressed: () async {
+                                    final scaffoldMessenger = ScaffoldMessenger.of(context);
                                     await _storageService.removeBlockedUser(id);
                                     setDialogState(() {});
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Utente sbloccato')),
-                                      );
-                                    }
+                                    if (!mounted) return;
+                                    scaffoldMessenger.showSnackBar(
+                                      const SnackBar(content: Text('Utente sbloccato')),
+                                    );
                                   },
                                 ),
                               );
@@ -770,8 +770,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: _useFcmBuild
-                              ? Colors.orange.withOpacity(0.1)
-                              : Colors.red.withOpacity(0.1),
+                              ? Colors.orange.withValues(alpha: 0.1)
+                              : Colors.red.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: _useFcmBuild ? Colors.orange : Colors.red,
@@ -877,12 +877,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 width: 72,
                 height: 72,
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
+                  color: Colors.blue.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.blueAccent, width: 2),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.blueAccent.withOpacity(0.3),
+                      color: Colors.blueAccent.withValues(alpha: 0.3),
                       blurRadius: 15,
                       spreadRadius: 1,
                     ),
@@ -940,7 +940,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   try {
                     await launchUrl(emailUri, mode: LaunchMode.externalApplication);
                   } catch (e) {
-                    print('Errore apertura mail: $e');
+                    debugPrint('Errore apertura mail: $e');
                   }
                 },
                 child: const Text(
@@ -963,7 +963,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   try {
                     await launchUrl(kofiUri, mode: LaunchMode.externalApplication);
                   } catch (e) {
-                    print('Errore apertura Ko-fi: $e');
+                    debugPrint('Errore apertura Ko-fi: $e');
                   }
                 },
               ),

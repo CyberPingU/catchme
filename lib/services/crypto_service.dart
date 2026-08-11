@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -157,7 +158,7 @@ class CryptoService {
       
       return utf8.decode(decryptedBytes);
     } catch (e) {
-      print('[CRYPTO] Errore decifratura: $e');
+      debugPrint('[CRYPTO] Errore decifratura: $e');
       return '[Errore di decifratura: Messaggio cifrato non leggibile]';
     }
   }

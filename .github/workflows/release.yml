@@ -19,16 +19,14 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          channel: 'stable' # Oppure flutter-version: '3.29.0'
+          channel: 'stable'
           cache: true
 
       - name: Get dependencies
         run: flutter pub get
         
-      - name: Clean Gradle cache
-        run: |
-          cd android
-          ./gradlew clean
+      - name: Clean build cache
+        run: flutter clean
 
       # ── Keystore (per tutti i flavor) ──────────────────────────────────────
       - name: Decode keystore

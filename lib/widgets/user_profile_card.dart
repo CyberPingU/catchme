@@ -111,7 +111,7 @@ class _UserProfileCardState extends State<UserProfileCard> {
         );
       }
     } catch (e) {
-      print('[UserProfileCard] Errore salvataggio foto: $e');
+      debugPrint('[UserProfileCard] Errore salvataggio foto: $e');
     }
   }
 
@@ -155,6 +155,7 @@ class _UserProfileCardState extends State<UserProfileCard> {
     }
 
     await widget.bluetoothService.sendPhotoRequest(widget.user.endpointId);
+    if (!mounted) return;
     setState(() => _hasRequestedPhoto = true);
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Richiesta foto inviata')),
@@ -342,13 +343,14 @@ class _UserProfileCardState extends State<UserProfileCard> {
                       side: const BorderSide(color: Colors.red),
                     ),
                     onPressed: () async {
+                      final navigator = Navigator.of(context);
+                      final scaffoldMessenger = ScaffoldMessenger.of(context);
                       await _storageService.addBlockedUser(user.endpointId);
-                      if (mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Utente bloccato')),
-                        );
-                      }
+                      if (!mounted) return;
+                      navigator.pop();
+                      scaffoldMessenger.showSnackBar(
+                        const SnackBar(content: Text('Utente bloccato')),
+                      );
                       widget.onActionDone?.call();
                     },
                   ),
@@ -402,9 +404,12 @@ class _UserProfileCardState extends State<UserProfileCard> {
         icon: const Icon(Icons.save),
         label: const Text('Salva Contatto'),
         onPressed: () async {
+          final navigator = Navigator.of(context);
+          final scaffoldMessenger = ScaffoldMessenger.of(context);
           await widget.bluetoothService.saveContact(user.endpointId);
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
+          if (!mounted) return;
+          navigator.pop();
+          scaffoldMessenger.showSnackBar(
             const SnackBar(content: Text('Salvato in Rubrica')),
           );
           widget.onActionDone?.call();

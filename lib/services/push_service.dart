@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:unifiedpush/unifiedpush.dart';
@@ -46,7 +47,7 @@ class PushService {
   // Quando viene generato un nuovo endpoint UnifiedPush
   Future<void> _onUnifiedPushEndpoint(PushEndpoint endpoint, String instance) async {
     final endpointUrl = endpoint.url;
-    print('[PushService] Nuovo endpoint UnifiedPush ricevuto: $endpointUrl');
+    debugPrint('[PushService] Nuovo endpoint UnifiedPush ricevuto: $endpointUrl');
     final profile = await _storageService.loadProfile();
     if (profile != null) {
       final updatedProfile = profile.copyWith(
@@ -58,11 +59,11 @@ class PushService {
   }
 
   void _onUnifiedPushFailed(FailedReason reason, String instance) async {
-    print('[PushService] Registrazione UnifiedPush fallita: ${reason.toString()}');
+    debugPrint('[PushService] Registrazione UnifiedPush fallita: ${reason.toString()}');
 
     if (_useFcm) {
       // Build Play Store: torna su FCM automaticamente
-      print('[PushService] Fallback automatico su FCM');
+      debugPrint('[PushService] Fallback automatico su FCM');
       final fcmToken = await getFCMToken();
       final profile = await _storageService.loadProfile();
       if (profile != null) {
@@ -88,14 +89,14 @@ class PushService {
   }
 
   void _onUnifiedPushUnregistered(String instance) {
-    print('[PushService] UnifiedPush de-registrato per $instance');
+    debugPrint('[PushService] UnifiedPush de-registrato per $instance');
   }
 
   // Quando arriva un messaggio tramite UnifiedPush
   void _onUnifiedPushMessage(PushMessage message, String instance) async {
     try {
       final payloadStr = utf8.decode(message.content);
-      print('[PushService] Messaggio UnifiedPush ricevuto: $payloadStr');
+      debugPrint('[PushService] Messaggio UnifiedPush ricevuto: $payloadStr');
       final data = json.decode(payloadStr) as Map<String, dynamic>;
       
       final type = data['type'] as String?;
@@ -111,14 +112,14 @@ class PushService {
         );
       }
     } catch (e) {
-      print('[PushService] Errore parsing messaggio UnifiedPush: $e');
+      debugPrint('[PushService] Errore parsing messaggio UnifiedPush: $e');
     }
   }
 
   Future<void> _setupFCM() async {
     if (!_useFcm) return;
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-      print('[PushService] Messaggio FCM in primo piano: ${message.data}');
+      debugPrint('[PushService] Messaggio FCM in primo piano: ${message.data}');
       final type = message.data['type'];
       if (type == 'message') {
         final senderHash = message.data['senderHash'] ?? '';
@@ -139,7 +140,7 @@ class PushService {
     try {
       return await FirebaseMessaging.instance.getToken();
     } catch (e) {
-      print('[PushService] Errore recupero token FCM: $e');
+      debugPrint('[PushService] Errore recupero token FCM: $e');
       return null;
     }
   }
@@ -188,10 +189,10 @@ class PushService {
       request.add(payloadBytes);
 
       final response = await request.close();
-      print('[PushService] Risposta test push: ${response.statusCode}');
+      debugPrint('[PushService] Risposta test push: ${response.statusCode}');
       return response.statusCode >= 200 && response.statusCode < 300;
     } catch (e) {
-      print('[PushService] Errore invio test push: $e');
+      debugPrint('[PushService] Errore invio test push: $e');
       return false;
     }
   }
