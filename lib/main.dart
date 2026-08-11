@@ -83,11 +83,12 @@ void main() async {
     await service.configure(
       androidConfiguration: AndroidConfiguration(
         onStart: onStart,
+        autoStart: true,
         isForegroundMode: true,
         notificationChannelId: 'catchme_gps_tracking',
-        initialNotificationTitle: 'CatchMe Attivo',
-        initialNotificationContent: 'Tracciamento GPS in corso',
-        foregroundServiceNotificationId: 1,
+        initialNotificationTitle: 'CatchMe GPS Service',
+        initialNotificationContent: 'Tracciamento in background attivo',
+        foregroundServiceNotificationId: 888,
       ),
       iosConfiguration: IosConfiguration(),
     );
