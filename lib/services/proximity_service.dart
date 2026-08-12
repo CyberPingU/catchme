@@ -46,10 +46,19 @@ class ProximityService {
   UserProfile? _currentProfile;
   String? _activeChatPublicKey;
   
-  static const String _serverUrl = 'wss://catchme.dreadful.work';
+  static const String _defaultServerUrl = 'wss://catchme.dreadful.work';
+  static const String _serverUrlPrefKey  = 'custom_server_url';
   Timer? _gpsTimer;
   Timer? _reconnectTimer;
   bool _isInBackground = false;
+
+  /// Restituisce l'URL del server: usa quello personalizzato se impostato,
+  /// altrimenti il default `wss://catchme.dreadful.work`.
+  Future<String> _getServerUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final custom = prefs.getString(_serverUrlPrefKey)?.trim() ?? '';
+    return custom.isNotEmpty ? custom : _defaultServerUrl;
+  }
 
   // Subscription al stream UP endpoint: ri-registra sul server quando arriva
   StreamSubscription<String>? _upEndpointSub;
@@ -88,6 +97,10 @@ class ProximityService {
       debugPrint('[DEBUG-CATCHME] connectToServer(): canale già aperto, skip.');
       return;
     }
+    _connectToServerAsync();
+  }
+
+  Future<void> _connectToServerAsync() async {
 
     // Sottoscrivi allo stream UP endpoint (una sola volta) per ri-registrare
     // sul server non appena ntfy/UP consegna l'endpoint (risolve la race condition).
@@ -105,7 +118,7 @@ class ProximityService {
       }
     });
 
-    const url = _serverUrl;
+    final url = await _getServerUrl();
     debugPrint('[DEBUG-CATCHME] connectToServer(): avvio connessione a $url ...');
     try {
       _reconnectTimer?.cancel();
@@ -1011,7 +1024,7 @@ class ProximityService {
       final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium);
       
       // 2. Connettiti temporaneamente al server
-      const url = _serverUrl;
+      final url = await _getServerUrl();
       debugPrint('[DEBUG-CATCHME] Connessione temporanea background a: $url');
 
       try {

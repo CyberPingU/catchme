@@ -3,6 +3,23 @@ const admin = require('firebase-admin');
 const https = require('https');
 const serviceAccount = require('./catchme-e8d0f-firebase-adminsdk-fbsvc-c70772cf2d.json');
 
+// ── Flag --debug ──────────────────────────────────────────────────────────────
+// Avvia con: node server.js --debug
+// Abilita il logging di coordinate GPS, token push e distanze tra utenti.
+// In produzione questi dati NON vengono mai stampati.
+const isDebug = process.argv.includes('--debug');
+
+/** Stampa solo se il server è avviato con --debug */
+function debugLog(...args) {
+    if (isDebug) console.log(...args);
+}
+
+if (isDebug) {
+    console.log('[INIT] Modalità DEBUG attiva: coordinate GPS, token push e distanze saranno visibili nei log.');
+} else {
+    console.log('[INIT] Modalità produzione: log sensibili disabilitati. Usa --debug per abilitarli.');
+}
+
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
 });
@@ -139,12 +156,13 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 // (anche di chi è offline). Invia aggiornamento solo a chi ha l'app aperta.
 function broadcastNearbyUsers() {
     const activeHashes = Array.from(clients.keys());
+    // Conteggio connessi: ok in produzione (nessun dato sensibile)
     console.log(`[BROADCAST] Connessi: ${activeHashes.length} | Posizioni note: ${knownUsers.size}`);
 
     for (const [hash, client] of clients.entries()) {
         const me = knownUsers.get(hash);
         if (!me || me.lat == null) {
-            console.log(`[BROADCAST] ${client.nickname}: posizione GPS non ancora disponibile, skip.`);
+            debugLog(`[BROADCAST] ${client.nickname}: posizione GPS non ancora disponibile, skip.`);
             continue;
         }
 
@@ -167,7 +185,8 @@ function broadcastNearbyUsers() {
             const isOnline = clients.has(otherHash);
             if (dist <= maxAllowedDistance) {
                 const isSharing = other.sharingWith && other.sharingWith.includes(hash);
-                console.log(`[BROADCAST] ${client.nickname} <-> ${other.nickname}: ${Math.round(dist)}m ✓ (${isOnline ? 'online' : 'offline'}), condivisionePrecisa: ${isSharing}`);
+                // Distanze e coordinate: solo in modalità debug
+                debugLog(`[BROADCAST] ${client.nickname} <-> ${other.nickname}: ${Math.round(dist)}m ✓ (${isOnline ? 'online' : 'offline'}), condivisionePrecisa: ${isSharing}`);
                 nearby.push({
                     publicKeyHash: otherHash,
                     nickname: other.nickname,
@@ -182,7 +201,7 @@ function broadcastNearbyUsers() {
             }
         }
 
-        console.log(`[BROADCAST] -> ${client.nickname} vede ${nearby.length} utenti vicini`);
+        debugLog(`[BROADCAST] -> ${client.nickname} vede ${nearby.length} utenti vicini`);
         client.ws.send(JSON.stringify({
             type: 'nearby_users',
             data: {
@@ -195,7 +214,7 @@ function broadcastNearbyUsers() {
 
 // ─── Invio push UnifiedPush ───────────────────────────────────────────────────
 function sendUnifiedPush(endpoint, senderHash, senderNickname, msgType) {
-    console.log(`[UnifiedPush] Invio push a ${endpoint.substring(0, 30)}...`);
+    debugLog(`[UnifiedPush] Invio push a ${endpoint.substring(0, 30)}...`);
     const bodyText = msgType === 'photoRequest' ? 'Richiesta foto profilo' : 'Hai ricevuto un nuovo messaggio';
     
     const payload = JSON.stringify({
@@ -240,7 +259,7 @@ function sendUnifiedPush(endpoint, senderHash, senderNickname, msgType) {
 function sendPushNotification(recipientHash, senderHash, senderNickname, msgType) {
     const user = knownUsers.get(recipientHash);
     if (!user || !user.pushToken) {
-        console.log(`[PUSH] Nessun token/endpoint per ${recipientHash} - push impossibile`);
+        debugLog(`[PUSH] Nessun token/endpoint per ${recipientHash} - push impossibile`);
         return;
     }
     
@@ -249,8 +268,8 @@ function sendPushNotification(recipientHash, senderHash, senderNickname, msgType
     if (provider === 'unifiedpush') {
         sendUnifiedPush(user.pushToken, senderHash, senderNickname, msgType);
     } else {
-        // FCM Fallback
-        console.log(`[FCM] Invio push a ${user.nickname} (token: ${user.pushToken.substring(0, 20)}...)`);
+        // FCM Fallback — token sensibile: solo in debug
+        debugLog(`[FCM] Invio push a ${user.nickname} (token: ${user.pushToken.substring(0, 20)}...)`);
         const body = msgType === 'photoRequest' ? 'Richiesta foto profilo' : 'Hai ricevuto un nuovo messaggio';
         admin.messaging().send({
             token: user.pushToken,
@@ -351,12 +370,15 @@ wss.on('connection', (ws) => {
                 });
                 triggerSave();
 
+                // Token push e coordinate GPS: solo in modalità debug
                 if (currentPushToken) {
-                    console.log(`[PUSH] Provider: ${currentPushProvider}, Token: ${currentPushToken.substring(0, 20)}...`);
+                    debugLog(`[PUSH] Provider: ${currentPushProvider}, Token: ${currentPushToken.substring(0, 20)}...`);
                 } else {
-                    console.log(`[PUSH] Nessun token registrato per ${safeNickname}`);
+                    debugLog(`[PUSH] Nessun token registrato per ${safeNickname}`);
                 }
-                console.log(`[INFO] Registrato: ${safeNickname} (${publicKeyHash}) Lat: ${safeLat}, Lon: ${safeLon}, Range: ${safeRadarRange}m, Sharing: ${JSON.stringify(safeSharingWith)}`);
+                debugLog(`[INFO] Registrato: ${safeNickname} (${publicKeyHash}) Lat: ${safeLat}, Lon: ${safeLon}, Range: ${safeRadarRange}m, Sharing: ${JSON.stringify(safeSharingWith)}`);
+                // Log produzione: solo nickname e hash (nessun dato sensibile)
+                console.log(`[INFO] Registrato: ${safeNickname} (hash: ...${publicKeyHash.slice(-8)})`);
 
                 // Consegna messaggi offline accumulati
                 if (offlineMessages.has(clientHash)) {
@@ -412,7 +434,9 @@ wss.on('connection', (ws) => {
                     }
                     
                     user.lastSeen = Date.now();
-                    console.log(`[INFO] GPS update per ${user.nickname}: ${user.lat}, ${user.lon}, Status: ${user.status}, Range: ${user.radarRange}m, Sharing: ${JSON.stringify(user.sharingWith)}`);
+                    // Coordinate GPS: solo in modalità debug
+                    debugLog(`[INFO] GPS update per ${user.nickname}: ${user.lat}, ${user.lon}, Status: ${user.status}, Range: ${user.radarRange}m, Sharing: ${JSON.stringify(user.sharingWith)}`);
+                    console.log(`[INFO] GPS update: ${user.nickname} (status: ${user.status})`);
                     triggerSave();
                     broadcastNearbyUsers();
                 }

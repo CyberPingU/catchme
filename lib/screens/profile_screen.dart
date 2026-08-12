@@ -58,6 +58,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _upEndpoint;
   StreamSubscription<String>? _upEndpointSub;
 
+  // Impostazioni Avanzate — Server URL personalizzato
+  final _serverUrlController = TextEditingController();
+  bool _isAdvancedExpanded = false;
+  static const String _serverUrlPrefKey = 'custom_server_url';
+  static const String _defaultServerUrl = 'wss://catchme.dreadful.work';
+
   int _selectedRadarRange = 500;
 
   String _formatBirthDate(DateTime date) {
@@ -91,6 +97,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadSecuritySettings();
     _loadAppSettings();
     _loadPushSettings();
+    _loadServerUrl();
 
     // Sottoscrivi allo stream UP endpoint: aggiorna la UI reattivamente
     // quando onNewEndpoint arriva (risolve il glitch visivo al boot).
@@ -193,6 +200,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (e) {
       debugPrint('Errore impostazione background execution: $e');
+    }
+  }
+
+  Future<void> _loadServerUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_serverUrlPrefKey) ?? '';
+    if (mounted) {
+      _serverUrlController.text = saved;
+    }
+  }
+
+  Future<void> _saveServerUrl(String url) async {
+    final prefs = await SharedPreferences.getInstance();
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) {
+      await prefs.remove(_serverUrlPrefKey);
+    } else {
+      await prefs.setString(_serverUrlPrefKey, trimmed);
+    }
+    // Forza la riconnessione con il nuovo URL
+    _bluetoothService.disconnectFromServer();
+    if (_bluetoothService.isConnected == false) {
+      _bluetoothService.connectToServer();
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(trimmed.isEmpty
+              ? 'URL server ripristinato al default ($_defaultServerUrl)'
+              : 'URL server aggiornato: $trimmed'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 
@@ -929,6 +969,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
              const SizedBox(height: 32),
+             // Sezione Impostazioni Avanzate (accordion)
+             Theme(
+               data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+               child: ExpansionTile(
+                 leading: const Icon(Icons.settings_applications),
+                 title: const Text(
+                   'Impostazioni Avanzate',
+                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                 ),
+                 initiallyExpanded: _isAdvancedExpanded,
+                 onExpansionChanged: (v) => setState(() => _isAdvancedExpanded = v),
+                 children: [
+                   Padding(
+                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                     child: Column(
+                       crossAxisAlignment: CrossAxisAlignment.start,
+                       children: [
+                         const Text(
+                           'URL Server WebSocket',
+                           style: TextStyle(fontWeight: FontWeight.w500),
+                         ),
+                         const SizedBox(height: 4),
+                         Text(
+                           'Default: $_defaultServerUrl',
+                           style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                         ),
+                         const SizedBox(height: 8),
+                         Row(
+                           children: [
+                             Expanded(
+                               child: TextField(
+                                 controller: _serverUrlController,
+                                 decoration: InputDecoration(
+                                   hintText: _defaultServerUrl,
+                                   border: const OutlineInputBorder(),
+                                   contentPadding: const EdgeInsets.symmetric(
+                                     horizontal: 12, vertical: 10),
+                                   isDense: true,
+                                 ),
+                                 keyboardType: TextInputType.url,
+                                 autocorrect: false,
+                                 style: const TextStyle(fontSize: 13),
+                               ),
+                             ),
+                             const SizedBox(width: 8),
+                             ElevatedButton(
+                               onPressed: () => _saveServerUrl(_serverUrlController.text),
+                               child: const Text('Salva'),
+                             ),
+                           ],
+                         ),
+                         const SizedBox(height: 4),
+                         TextButton.icon(
+                           icon: const Icon(Icons.restore, size: 16),
+                           label: const Text('Ripristina default', style: TextStyle(fontSize: 12)),
+                           onPressed: () {
+                             _serverUrlController.clear();
+                             _saveServerUrl('');
+                           },
+                         ),
+                       ],
+                     ),
+                   ),
+                 ],
+               ),
+             ),
+             const SizedBox(height: 32),
              // Sezione Informazioni
              const Text(
                'Informazioni',
@@ -1097,6 +1204,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     _upEndpointSub?.cancel();
+    _serverUrlController.dispose();
     _nicknameController.dispose();
     _ageController.dispose();
     _bioController.dispose();
