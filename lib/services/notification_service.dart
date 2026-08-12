@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
@@ -6,6 +7,10 @@ class NotificationService {
   NotificationService._internal();
 
   final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
+
+  /// ID del canale usato dal Foreground Service (deve corrispondere a
+  /// AndroidConfiguration.notificationChannelId in main.dart).
+  static const String foregroundChannelId = 'catchme_foreground_service';
 
   Future<void> initialize({Function(String?)? onNotificationClick}) async {
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -23,25 +28,58 @@ class NotificationService {
         }
       },
     );
+
+    // Crea il canale del Foreground Service subito dopo l'inizializzazione,
+    // prima che flutter_background_service tenti di postare la notifica.
+    // Su Android 14/15 il canale DEVE esistere prima di startForeground().
+    if (Platform.isAndroid) {
+      await _createForegroundServiceChannel();
+    }
+  }
+
+  /// Crea (o aggiorna) il Notification Channel per il Foreground Service.
+  /// Idempotente: Android ignora la chiamata se il canale esiste già.
+  Future<void> _createForegroundServiceChannel() async {
+    final androidPlugin = _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidPlugin == null) return;
+
+    const channel = AndroidNotificationChannel(
+      foregroundChannelId,           // ID — deve corrispondere ad AndroidConfiguration
+      'CatchMe — Servizio Attivo',   // nome visibile nelle impostazioni Android
+      description: 'Mantiene attivo il tracciamento GPS in background',
+      importance: Importance.low,    // low = nessun suono, barra di stato silenziosa
+      playSound: false,
+      enableVibration: false,
+      showBadge: false,
+    );
+
+    await androidPlugin.createNotificationChannel(channel);
   }
 
   Future<void> showForegroundNotification() async {
-    const androidDetails = AndroidNotificationDetails(
-      'catchme_foreground',
-      'Servizio Attivo',
-      channelDescription: 'Scansione Bluetooth attiva',
+    // Usa lo stesso channelId del Foreground Service per evitare
+    // CannotPostForegroundServiceNotificationException su Android 14/15.
+    final androidDetails = AndroidNotificationDetails(
+      foregroundChannelId,           // ← stesso ID di AndroidConfiguration
+      'CatchMe — Servizio Attivo',
+      channelDescription: 'Mantiene attivo il tracciamento GPS in background',
       importance: Importance.low,
       priority: Priority.low,
       ongoing: true,
       autoCancel: false,
+      icon: '@mipmap/ic_launcher',   // icona esplicita — mai null
+      playSound: false,
+      enableVibration: false,
     );
 
-    const details = NotificationDetails(android: androidDetails);
+    final details = NotificationDetails(android: androidDetails);
 
     await _notifications.show(
-      1,
-      'CatchMe',
-      'Scansione utenti vicini attiva',
+      888,   // stesso ID di foregroundServiceNotificationId
+      'CatchMe in esecuzione',
+      'Tracciamento GPS attivo',
       details,
     );
   }

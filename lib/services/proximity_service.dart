@@ -50,6 +50,13 @@ class ProximityService {
   Timer? _reconnectTimer;
   bool _isInBackground = false;
 
+  // Subscription al stream UP endpoint: ri-registra sul server quando arriva
+  StreamSubscription<String>? _upEndpointSub;
+
+  // true se l'ultima _registerWithServer() è stata inviata con pushToken null
+  // (es. timeout attesa UP endpoint): il listener ri-registra appena arriva l'endpoint.
+  bool _registeredWithNullToken = false;
+
   Future<void> initialize() async {
     await _cryptoService.initialize();
   }
@@ -80,6 +87,22 @@ class ProximityService {
       debugPrint('[DEBUG-CATCHME] connectToServer(): canale già aperto, skip.');
       return;
     }
+
+    // Sottoscrivi allo stream UP endpoint (una sola volta) per ri-registrare
+    // sul server non appena ntfy/UP consegna l'endpoint (risolve la race condition).
+    _upEndpointSub ??= PushService().onUnifiedPushEndpoint.listen((endpoint) {
+      debugPrint('[DEBUG-CATCHME] UP endpoint stream: nuovo endpoint ricevuto=$endpoint, _registeredWithNullToken=$_registeredWithNullToken');
+      // Ri-registra sempre quando arriva un nuovo endpoint UP:
+      // - se la prima registrazione era andata in timeout (token null)
+      // - oppure se l'endpoint è cambiato (ntfy rigenera l'URL)
+      if (_isConnected && _channel != null && _currentProfile != null) {
+        debugPrint('[DEBUG-CATCHME] UP endpoint stream: ri-registro sul server con endpoint aggiornato.');
+        _registeredWithNullToken = false;
+        _registerWithServer();
+      } else {
+        debugPrint('[DEBUG-CATCHME] UP endpoint stream: WS non connesso, endpoint salvato in cache per prossima connessione.');
+      }
+    });
 
     const url = _serverUrl;
     debugPrint('[DEBUG-CATCHME] connectToServer(): avvio connessione a $url ...');
@@ -156,16 +179,55 @@ class ProximityService {
       debugPrint('[DEBUG-CATCHME] Errore recupero last known GPS: $e');
     }
 
-    String? fcmToken;
+    // ── PUSH TOKEN RESOLUTION ──────────────────────────────────────────────
+    // Log esplicito dello stato corrente per diagnosticare la race condition
+    final profileProvider = _currentProfile!.pushProvider;
+    final profileToken   = _currentProfile!.pushToken;
+    debugPrint('[DEBUG-CATCHME] _registerWithServer(): pushProvider=$profileProvider, profileToken=$profileToken');
+
+    String? pushToken;
     try {
-      debugPrint('[DEBUG-CATCHME] _registerWithServer(): recupero FCM token...');
-      fcmToken = await PushService().getFCMToken();
-      debugPrint('[DEBUG-CATCHME] FCM Token: $fcmToken');
+      if (profileProvider == 'unifiedpush') {
+        // Caso UnifiedPush: usa il token già nel profilo oppure quello in cache
+        // nel PushService (già ricevuto via onNewEndpoint ma non ancora salvato nel profilo).
+        pushToken = profileToken ?? PushService().lastUpEndpoint;
+        debugPrint('[DEBUG-CATCHME] _registerWithServer(): UP token da profilo/cache=$pushToken');
+
+        if (pushToken == null) {
+          // Race condition: onNewEndpoint non è ancora arrivato.
+          // Aspettiamo fino a 8 secondi che il callback UP consegni l'endpoint.
+          debugPrint('[DEBUG-CATCHME] _registerWithServer(): endpoint UP null — attendo onNewEndpoint (max 8s)...');
+          try {
+            pushToken = await PushService()
+                .onUnifiedPushEndpoint
+                .first
+                .timeout(const Duration(seconds: 8));
+            debugPrint('[DEBUG-CATCHME] _registerWithServer(): endpoint UP ricevuto dopo attesa=$pushToken');
+            _registeredWithNullToken = false;
+          } catch (_) {
+            // Timeout: il payload verrà inviato senza token push.
+            // Il listener _upEndpointSub ri-registrerà appena ntfy risponde.
+            debugPrint('[DEBUG-CATCHME] _registerWithServer(): timeout attesa endpoint UP — procedo senza token push. Il listener ri-registrerà appena disponibile.');
+            _registeredWithNullToken = true;
+          }
+        }
+      } else {
+        // Caso FCM (build Play Store)
+        debugPrint('[DEBUG-CATCHME] _registerWithServer(): recupero FCM token...');
+        pushToken = await PushService().getFCMToken();
+        debugPrint('[DEBUG-CATCHME] _registerWithServer(): FCM Token=$pushToken');
+      }
     } catch (e) {
-      debugPrint('[DEBUG-CATCHME] Errore recupero FCM token: $e');
+      debugPrint('[DEBUG-CATCHME] Errore recupero push token: $e');
     }
+    // ── fine PUSH TOKEN RESOLUTION ─────────────────────────────────────────
 
     final sharingWith = await _getSharingWithList();
+
+    // Il token effettivo da inviare: preferisce quello nel profilo (già persistito),
+    // poi quello appena risolto sopra.
+    final effectivePushToken = profileToken ?? pushToken;
+    debugPrint('[DEBUG-CATCHME] _registerWithServer(): effectivePushToken=$effectivePushToken, pushProvider=$profileProvider');
 
     final payload = {
       'type': 'register',
@@ -179,8 +241,8 @@ class ProximityService {
         'birthDate': _currentProfile!.birthDate?.toIso8601String(),
         'gender': _currentProfile!.gender,
         'bio': _currentProfile!.bio,
-        'pushProvider': _currentProfile!.pushProvider,
-        'pushToken': _currentProfile!.pushToken ?? fcmToken,
+        'pushProvider': profileProvider,
+        'pushToken': effectivePushToken,
         'status': _currentProfile!.status.name,
         'radarRange': _currentProfile!.radarRange,
         'sharingWith': sharingWith,
@@ -937,8 +999,19 @@ class ProximityService {
       // 3. Invia pacchetto di registrazione per aggiornare la posizione sul server
       final publicKey = _cryptoService.publicKey;
       final publicKeyHash = publicKey != null ? _cryptoService.getPublicKeyHash(publicKey) : '';
-      final fcmToken = await PushService().getFCMToken();
-      
+
+      // Risolvi il push token correttamente (UP o FCM) anche in background
+      final bgProfileProvider = _currentProfile?.pushProvider;
+      final bgProfileToken    = _currentProfile?.pushToken;
+      String? bgPushToken;
+      if (bgProfileProvider == 'unifiedpush') {
+        bgPushToken = bgProfileToken ?? PushService().lastUpEndpoint;
+        debugPrint('[DEBUG-CATCHME] _sendBackgroundLocationUpdate(): UP token=$bgPushToken');
+      } else {
+        bgPushToken = await PushService().getFCMToken();
+        debugPrint('[DEBUG-CATCHME] _sendBackgroundLocationUpdate(): FCM token=$bgPushToken');
+      }
+
       final sharingWith = await _getSharingWithList();
 
       final payload = {
@@ -953,7 +1026,8 @@ class ProximityService {
           'birthDate': _currentProfile?.birthDate?.toIso8601String(),
           'gender': _currentProfile?.gender,
           'bio': _currentProfile?.bio,
-          'fcmToken': fcmToken,
+          'pushProvider': bgProfileProvider,
+          'pushToken': bgPushToken,
           'sharingWith': sharingWith,
         }
       };
@@ -1161,6 +1235,8 @@ class ProximityService {
   }
 
   void dispose() {
+    _upEndpointSub?.cancel();
+    _upEndpointSub = null;
     _discoveredUsersController.close();
     _connectionRequestController.close();
     _messageController.close();

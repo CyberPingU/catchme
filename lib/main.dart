@@ -78,6 +78,16 @@ void main() async {
     }
   }
   
+  // Crea il Notification Channel del Foreground Service PRIMA di configure(),
+  // altrimenti Android 14/15 lancia CannotPostForegroundServiceNotificationException.
+  // NotificationService.initialize() crea il canale internamente; lo invochiamo
+  // qui in modo minimale (senza callback UI) solo per garantire la creazione del canale.
+  try {
+    await NotificationService().initialize();
+  } catch (e) {
+    debugPrint('Errore pre-creazione canale notifica foreground: $e');
+  }
+
   // Inizializza il servizio in background per tracciamento GPS
   try {
     final service = FlutterBackgroundService();
@@ -86,10 +96,13 @@ void main() async {
         onStart: onStart,
         autoStart: false, // Disabilita autoStart per Android 14+ per evitare crash
         isForegroundMode: true,
-        notificationChannelId: 'catchme_gps_tracking',
-        initialNotificationTitle: 'CatchMe GPS Service',
-        initialNotificationContent: 'Tracciamento in background attivo',
+        // ID canale: deve corrispondere esattamente a NotificationService.foregroundChannelId
+        notificationChannelId: NotificationService.foregroundChannelId,
+        initialNotificationTitle: 'CatchMe in esecuzione',
+        initialNotificationContent: 'Tracciamento GPS attivo',
         foregroundServiceNotificationId: 888,
+        // Tipo foreground service esplicito richiesto da Android 14+
+        foregroundServiceTypes: const [AndroidForegroundType.location],
       ),
       iosConfiguration: IosConfiguration(),
     );

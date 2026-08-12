@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:unifiedpush/unifiedpush.dart';
@@ -22,6 +23,14 @@ class PushService {
   // Esposto all'UI: true se UP ha fallito e non c'è fallback
   bool upFailed = false;
 
+  // Stream che emette l'endpoint UnifiedPush ogni volta che viene (ri)generato
+  final _upEndpointController = StreamController<String>.broadcast();
+  Stream<String> get onUnifiedPushEndpoint => _upEndpointController.stream;
+
+  // Ultimo endpoint UP noto (null finché onNewEndpoint non è stato chiamato)
+  String? _lastUpEndpoint;
+  String? get lastUpEndpoint => _lastUpEndpoint;
+
   Future<void> initialize() async {
     if (_useFcm) await _setupFCM();
     final profile = await _storageService.loadProfile();
@@ -43,16 +52,50 @@ class PushService {
       onMessage: _onUnifiedPushMessage,
     );
 
-    // Registrazione automatica per UnifiedPush nella build F-Droid
+    // Registrazione esplicita con il distributore già noto (es. ntfy).
+    // Senza questa chiamata ntfy non riceve mai l'Intent e onNewEndpoint
+    // non viene mai invocato → race condition / timeout.
     if (!_useFcm) {
-      await UnifiedPush.register();
+      final distributor = await UnifiedPush.getDistributor();
+      debugPrint('[PushService] initializeUnifiedPush(): distributore corrente="$distributor"');
+
+      if (distributor != null && distributor.isNotEmpty) {
+        // Distributore già selezionato: registra direttamente senza dialog
+        debugPrint('[PushService] initializeUnifiedPush(): chiamo UnifiedPush.register() con distributore=$distributor');
+        await UnifiedPush.register();
+      } else {
+        // Nessun distributore salvato: cerca quelli disponibili
+        final distributors = await UnifiedPush.getDistributors();
+        debugPrint('[PushService] initializeUnifiedPush(): distributori disponibili=$distributors');
+
+        if (distributors.length == 1) {
+          // Un solo distributore installato: selezionalo e registra automaticamente
+          debugPrint('[PushService] initializeUnifiedPush(): seleziono automaticamente ${distributors.first}');
+          await UnifiedPush.saveDistributor(distributors.first);
+          await UnifiedPush.register();
+        } else if (distributors.isNotEmpty) {
+          // Più distributori: seleziona il primo (ntfy ha priorità se presente)
+          final preferred = distributors.firstWhere(
+            (d) => d.contains('ntfy'),
+            orElse: () => distributors.first,
+          );
+          debugPrint('[PushService] initializeUnifiedPush(): seleziono $preferred tra $distributors');
+          await UnifiedPush.saveDistributor(preferred);
+          await UnifiedPush.register();
+        } else {
+          debugPrint('[PushService] initializeUnifiedPush(): nessun distributore UP installato.');
+        }
+      }
     }
   }
 
   // Quando viene generato un nuovo endpoint UnifiedPush
   Future<void> _onUnifiedPushEndpoint(PushEndpoint endpoint, String instance) async {
     final endpointUrl = endpoint.url;
-    debugPrint('[PushService] Nuovo endpoint UnifiedPush ricevuto: $endpointUrl');
+    debugPrint('[PushService] onNewEndpoint: endpoint=$endpointUrl instance=$instance');
+    _lastUpEndpoint = endpointUrl;
+    _upEndpointController.add(endpointUrl);
+
     final profile = await _storageService.loadProfile();
     if (profile != null) {
       final updatedProfile = profile.copyWith(
@@ -60,6 +103,9 @@ class PushService {
         pushToken: endpointUrl,
       );
       await _storageService.saveProfile(updatedProfile);
+      debugPrint('[PushService] Profilo aggiornato con endpoint UP: $endpointUrl');
+    } else {
+      debugPrint('[PushService] onNewEndpoint: profilo non trovato, endpoint non salvato nel profilo');
     }
   }
 
