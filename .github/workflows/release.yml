@@ -1,20 +1,18 @@
-name: Build & Release
+name: Release FOSS
 
 on:
   push:
     tags:
-      - 'v*'   # Si attiva su tag tipo v1.0.0
+      - 'v*'
 
 jobs:
-  build:
+  build-foss:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Permesso per softprops/action-gh-release
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Scarica tutta la cronologia Git per verificare i branch del tag
 
       - uses: actions/setup-java@v4
         with:
@@ -32,18 +30,6 @@ jobs:
       - name: Clean build cache
         run: flutter clean
 
-      # ── Identifica se il Tag è su 'main' o su 'full' ──────────────────────
-      - name: Detect Target Branch
-        id: branch_check
-        run: |
-          if git branch -r --contains ${{ github.ref }} | grep -q "origin/main"; then
-            echo "IS_MAIN=true" >> $GITHUB_ENV
-          fi
-          if git branch -r --contains ${{ github.ref }} | grep -q "origin/full"; then
-            echo "IS_FULL=true" >> $GITHUB_ENV
-          fi
-
-      # ── Keystore (necessario per tutti) ───────────────────────────────────
       - name: Decode keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/catchme-release.jks
@@ -56,38 +42,16 @@ jobs:
           keyAlias=catchme
           storeFile=../catchme-release.jks
           EOF
-
-      # ── Build FOSS (se il Tag appartiene al branch 'main') ─────────────────
       - name: Build FOSS APK
-        if: env.IS_MAIN == 'true'
         run: |
           flutter build apk \
             --release \
+            --flavor fdroid \
             --dart-define=PUSH_PROVIDER=unifiedpush
-          mv build/app/outputs/flutter-apk/app-release.apk \
+          mv build/app/outputs/flutter-apk/app-fdroid-release.apk \
              build/app/outputs/flutter-apk/catchme-foss-${{ github.ref_name }}.apk
-
-      # ── Build Full (se il Tag appartiene al branch 'full') ─────────────────
-      - name: Write google-services.json
-        if: env.IS_FULL == 'true'
-        run: |
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
-
-      - name: Build playstore APK
-        if: env.IS_FULL == 'true'
-        run: |
-          flutter build apk \
-            --release \
-            --flavor playstore \
-            --dart-define=PUSH_PROVIDER=fcm
-          mv build/app/outputs/flutter-apk/app-playstore-release.apk \
-             build/app/outputs/flutter-apk/catchme-full-${{ github.ref_name }}.apk
-
-      # ── Pubblica l'APK generato nella GitHub Release ──────────────────────
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            build/app/outputs/flutter-apk/catchme-foss-*.apk
-            build/app/outputs/flutter-apk/catchme-full-*.apk
+          files: build/app/outputs/flutter-apk/catchme-foss-*.apk
           generate_release_notes: true
