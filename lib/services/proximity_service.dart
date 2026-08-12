@@ -6,6 +6,7 @@ import 'package:image/image.dart' as img;
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/status.dart' as ws_status;
 import '../models/nearby_user.dart';
 import '../models/chat_message.dart';
 import '../models/contact.dart';
@@ -116,19 +117,37 @@ class ProximityService {
       _channel!.stream.listen(
         (message) => _handleServerMessage(message),
         onError: (e) {
-          debugPrint('[DEBUG-CATCHME] Errore WebSocket: $e');
+          if (e is SocketException) {
+            debugPrint('[DEBUG-CATCHME] SocketException WebSocket (rete assente?): $e');
+          } else if (e is WebSocketChannelException) {
+            debugPrint('[DEBUG-CATCHME] WebSocketChannelException: $e');
+          } else {
+            debugPrint('[DEBUG-CATCHME] Errore WebSocket: $e');
+          }
           _onConnectionLost();
         },
         onDone: () {
           debugPrint('[DEBUG-CATCHME] Connessione WebSocket chiusa dal server');
           _onConnectionLost();
         },
+        cancelOnError: false,
       );
 
       _registerWithServer();
+    } on SocketException catch (e) {
+      debugPrint('[DEBUG-CATCHME] SocketException avvio connessione (rete assente?): $e');
+      _isConnected = false;
+      _channel = null;
+      _onConnectionLost();
+    } on WebSocketChannelException catch (e) {
+      debugPrint('[DEBUG-CATCHME] WebSocketChannelException avvio connessione: $e');
+      _isConnected = false;
+      _channel = null;
+      _onConnectionLost();
     } catch (e) {
       debugPrint('[DEBUG-CATCHME] Errore avvio connessione WebSocket: $e');
       _isConnected = false;
+      _channel = null;
       _onConnectionLost();
     }
   }
@@ -986,16 +1005,38 @@ class ProximityService {
   }
 
   Future<void> _sendBackgroundLocationUpdate() async {
+    WebSocketChannel? tempChannel;
     try {
       // 1. Rileva posizione GPS (precisione media per consumare meno batteria al chiuso/background)
       final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium);
       
       // 2. Connettiti temporaneamente al server
       const url = _serverUrl;
-      
       debugPrint('[DEBUG-CATCHME] Connessione temporanea background a: $url');
-      final tempChannel = WebSocketChannel.connect(Uri.parse(url));
-      
+
+      try {
+        tempChannel = WebSocketChannel.connect(Uri.parse(url));
+      } on SocketException catch (e) {
+        debugPrint('[DEBUG-CATCHME] _sendBackgroundLocationUpdate(): SocketException connessione (rete assente?): $e');
+        return;
+      } on WebSocketChannelException catch (e) {
+        debugPrint('[DEBUG-CATCHME] _sendBackgroundLocationUpdate(): WebSocketChannelException connessione: $e');
+        return;
+      }
+
+      // Ascolta gli errori del canale temporaneo senza far propagare eccezioni non gestite
+      tempChannel.stream.listen(
+        null,
+        onError: (e) {
+          if (e is SocketException) {
+            debugPrint('[DEBUG-CATCHME] _sendBackgroundLocationUpdate() stream SocketException: $e');
+          } else {
+            debugPrint('[DEBUG-CATCHME] _sendBackgroundLocationUpdate() stream error: $e');
+          }
+        },
+        cancelOnError: true,
+      );
+
       // 3. Invia pacchetto di registrazione per aggiornare la posizione sul server
       final publicKey = _cryptoService.publicKey;
       final publicKeyHash = publicKey != null ? _cryptoService.getPublicKeyHash(publicKey) : '';
@@ -1031,15 +1072,23 @@ class ProximityService {
           'sharingWith': sharingWith,
         }
       };
-      
-      tempChannel.sink.add(jsonEncode(payload));
-      
-      // Lascia un breve ritardo per garantire che il socket invii il pacchetto prima di chiudersi
-      await Future.delayed(const Duration(milliseconds: 1000));
-      await tempChannel.sink.close();
-      debugPrint('[DEBUG-CATCHME] Aggiornamento GPS background completato con successo.');
+
+      try {
+        tempChannel.sink.add(jsonEncode(payload));
+        // Breve ritardo per garantire che il socket invii il pacchetto prima di chiudersi
+        await Future.delayed(const Duration(milliseconds: 1000));
+        await tempChannel.sink.close(ws_status.normalClosure);
+        debugPrint('[DEBUG-CATCHME] Aggiornamento GPS background completato con successo.');
+      } on SocketException catch (e) {
+        debugPrint('[DEBUG-CATCHME] _sendBackgroundLocationUpdate(): SocketException invio payload: $e');
+      } on WebSocketChannelException catch (e) {
+        debugPrint('[DEBUG-CATCHME] _sendBackgroundLocationUpdate(): WebSocketChannelException invio payload: $e');
+      }
     } catch (e) {
       debugPrint('[DEBUG-CATCHME] Errore aggiornamento GPS background: $e');
+    } finally {
+      // Assicura la chiusura del canale anche in caso di eccezione
+      try { await tempChannel?.sink.close(); } catch (_) {}
     }
   }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -51,6 +52,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _selectedDistributor;
   List<String> _distributors = [];
 
+  // true mentre _loadPushSettings() è in corso: evita il falso banner di errore
+  bool _isPushLoading = true;
+  // Endpoint UP corrente (aggiornato reattivamente via stream)
+  String? _upEndpoint;
+  StreamSubscription<String>? _upEndpointSub;
+
   int _selectedRadarRange = 500;
 
   String _formatBirthDate(DateTime date) {
@@ -84,6 +91,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadSecuritySettings();
     _loadAppSettings();
     _loadPushSettings();
+
+    // Sottoscrivi allo stream UP endpoint: aggiorna la UI reattivamente
+    // quando onNewEndpoint arriva (risolve il glitch visivo al boot).
+    _upEndpointSub = PushService().onUnifiedPushEndpoint.listen((endpoint) {
+      if (mounted) {
+        setState(() {
+          _upEndpoint = endpoint;
+          _isPushLoading = false;
+        });
+      }
+    });
+
+    // Popola subito dalla cache in-memory se l'endpoint è già noto (sync, zero I/O)
+    final cached = PushService().lastUpEndpoint;
+    if (cached != null) {
+      _upEndpoint = cached;
+      _isPushLoading = false;
+    }
+    // Altrimenti tenta SharedPreferences in background (async, non blocca la UI)
+    else {
+      PushService().getUpEndpoint().then((ep) {
+        if (ep != null && mounted) {
+          setState(() {
+            _upEndpoint = ep;
+            _isPushLoading = false;
+          });
+        }
+      });
+    }
   }
 
   @override
@@ -184,12 +220,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadPushSettings() async {
     final distributors = await _pushService.getUnifiedPushDistributors();
     final active = await _pushService.getActiveDistributor();
-    setState(() {
-      _distributors = distributors;
-      if (active != null && active.isNotEmpty) {
-        _selectedDistributor = active;
-      }
-    });
+    // Risolvi l'endpoint da tutte le sorgenti: in-memory → SharedPreferences → profilo
+    final resolvedEndpoint = await _pushService.getUpEndpoint();
+
+    if (mounted) {
+      setState(() {
+        _distributors = distributors;
+        if (active != null && active.isNotEmpty) {
+          _selectedDistributor = active;
+        }
+        // Popola _upEndpoint con la sorgente più aggiornata disponibile
+        _upEndpoint ??= resolvedEndpoint;
+        // Fine caricamento: rimuovi lo stato di attesa
+        _isPushLoading = false;
+      });
+    }
   }
 
   Future<void> _changePushProvider(String provider) async {
@@ -271,8 +316,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
-    // UnifiedPush: POST all'endpoint registrato
-    final endpoint = profile?.pushToken;
+    // UnifiedPush: risolvi l'endpoint da tutte le sorgenti disponibili
+    // (profilo persistito → cache in-memory → SharedPreferences)
+    final endpoint = profile?.pushToken
+        ?? _upEndpoint
+        ?? await _pushService.getUpEndpoint();
     if (endpoint == null || endpoint.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -718,9 +766,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                    ListTile(
                       leading: const Icon(Icons.notifications),
                       title: const Text('Provider Notifiche Push'),
-                      subtitle: Text(_selectedPushProvider == 'fcm'
-                          ? 'Google FCM (Firebase)'
-                          : 'UnifiedPush (${_selectedDistributor ?? "Seleziona..."})'),
+                      subtitle: _isPushLoading
+                          ? const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 12, height: 12,
+                                  child: CircularProgressIndicator(strokeWidth: 1.5),
+                                ),
+                                SizedBox(width: 6),
+                                Text('Inizializzazione Push...'),
+                              ],
+                            )
+                          : Text(_selectedPushProvider == 'fcm'
+                              ? 'Google FCM (Firebase)'
+                              : _upEndpoint != null
+                                  ? 'UnifiedPush — Attivo ✓'
+                                  : 'UnifiedPush (${_selectedDistributor ?? "Seleziona..."})'),
                       trailing: _useFcmBuild
                           ? DropdownButton<String>(
                               value: _selectedPushProvider,
@@ -762,47 +824,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
                        trailing: const Icon(Icons.play_arrow),
                        onTap: _sendTestPush,
                      ),
-                    // Banner informativo UnifiedPush
-                    if (_selectedPushProvider == 'unifiedpush') ...[
+                    // Banner stato UnifiedPush — reattivo, non mostra falsi errori al boot
+                    if (_selectedPushProvider == 'unifiedpush' && !_isPushLoading) ...[
                       const Divider(height: 1),
-                      Container(
-                        margin: const EdgeInsets.all(12),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _useFcmBuild
-                              ? Colors.orange.withValues(alpha: 0.1)
-                              : Colors.red.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: _useFcmBuild ? Colors.orange : Colors.red,
-                            width: 1,
+                      if (_upEndpoint != null)
+                        // Endpoint registrato correttamente → banner verde
+                        Container(
+                          margin: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.green, width: 1),
                           ),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(
-                              _useFcmBuild ? Icons.info_outline : Icons.warning_amber,
-                              color: _useFcmBuild ? Colors.orange : Colors.red,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _useFcmBuild
-                                    ? 'UnifiedPush richiede ntfy o un altro distributore installato sul dispositivo. In assenza, verrà usato FCM automaticamente.'
-                                    : 'Questa versione (F-Droid) usa solo UnifiedPush. Senza ntfy installato, le notifiche non funzioneranno quando l\'app è chiusa.',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _useFcmBuild
-                                      ? Colors.orange.shade800
-                                      : Colors.red.shade800,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'UnifiedPush attivo. Endpoint registrato correttamente.',
+                                  style: TextStyle(fontSize: 12, color: Colors.green.shade800),
                                 ),
                               ),
+                            ],
+                          ),
+                        )
+                      else
+                        // Endpoint non ancora ricevuto → banner avviso/errore
+                        Container(
+                          margin: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: _useFcmBuild
+                                ? Colors.orange.withValues(alpha: 0.1)
+                                : Colors.red.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _useFcmBuild ? Colors.orange : Colors.red,
+                              width: 1,
                             ),
-                          ],
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                _useFcmBuild ? Icons.info_outline : Icons.warning_amber,
+                                color: _useFcmBuild ? Colors.orange : Colors.red,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _useFcmBuild
+                                      ? 'UnifiedPush richiede ntfy o un altro distributore installato sul dispositivo. In assenza, verrà usato FCM automaticamente.'
+                                      : 'Questa versione (F-Droid) usa solo UnifiedPush. Senza ntfy installato, le notifiche non funzioneranno quando l\'app è chiusa.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: _useFcmBuild
+                                        ? Colors.orange.shade800
+                                        : Colors.red.shade800,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
                     ],
                  ],
                ),
@@ -1008,6 +1096,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
+    _upEndpointSub?.cancel();
     _nicknameController.dispose();
     _ageController.dispose();
     _bioController.dispose();

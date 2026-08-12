@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:unifiedpush/unifiedpush.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'notification_service.dart';
@@ -30,6 +31,25 @@ class PushService {
   // Ultimo endpoint UP noto (null finché onNewEndpoint non è stato chiamato)
   String? _lastUpEndpoint;
   String? get lastUpEndpoint => _lastUpEndpoint;
+
+  /// Chiave SharedPreferences per la cache persistente dell'endpoint UP.
+  static const String _upEndpointPrefKey = 'up_endpoint_cache';
+
+  /// Restituisce l'endpoint UP da tutte le sorgenti disponibili:
+  /// 1. cache in-memory (più veloce)
+  /// 2. SharedPreferences (persistente tra riavvii)
+  /// 3. profilo salvato
+  Future<String?> getUpEndpoint() async {
+    if (_lastUpEndpoint != null) return _lastUpEndpoint;
+    final prefs = await SharedPreferences.getInstance();
+    final cached = prefs.getString(_upEndpointPrefKey);
+    if (cached != null && cached.isNotEmpty) {
+      _lastUpEndpoint = cached; // popola la cache in-memory
+      return cached;
+    }
+    final profile = await _storageService.loadProfile();
+    return profile?.pushToken;
+  }
 
   Future<void> initialize() async {
     if (_useFcm) await _setupFCM();
@@ -96,6 +116,18 @@ class PushService {
     _lastUpEndpoint = endpointUrl;
     _upEndpointController.add(endpointUrl);
 
+    // Persisti sempre in SharedPreferences come cache resiliente:
+    // garantisce che l'endpoint sopravviva anche se il profilo non è ancora
+    // stato creato al momento del callback (race condition al primo avvio).
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_upEndpointPrefKey, endpointUrl);
+      debugPrint('[PushService] onNewEndpoint: endpoint persistito in SharedPreferences');
+    } catch (e) {
+      debugPrint('[PushService] onNewEndpoint: errore salvataggio SharedPreferences: $e');
+    }
+
+    // Aggiorna anche il profilo se disponibile
     final profile = await _storageService.loadProfile();
     if (profile != null) {
       final updatedProfile = profile.copyWith(
@@ -103,9 +135,12 @@ class PushService {
         pushToken: endpointUrl,
       );
       await _storageService.saveProfile(updatedProfile);
-      debugPrint('[PushService] Profilo aggiornato con endpoint UP: $endpointUrl');
+      debugPrint('[PushService] onNewEndpoint: profilo aggiornato con endpoint UP: $endpointUrl');
     } else {
-      debugPrint('[PushService] onNewEndpoint: profilo non trovato, endpoint non salvato nel profilo');
+      // Profilo non ancora creato: l'endpoint è già in SharedPreferences e in
+      // _lastUpEndpoint. Quando il profilo verrà creato/salvato, il chiamante
+      // dovrà includere pushToken = PushService().lastUpEndpoint.
+      debugPrint('[PushService] onNewEndpoint: profilo non trovato — endpoint in cache SharedPreferences/$_upEndpointPrefKey');
     }
   }
 
