@@ -280,14 +280,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _changePushProvider(String provider) async {
     if (provider == 'fcm') {
       await _pushService.unregisterUnifiedPush();
-      final fcmToken = await _pushService.getFCMToken();
+      final upEndpoint = await _pushService.getUpEndpoint();
       setState(() {
-        _selectedPushProvider = 'fcm';
+        _selectedPushProvider = 'unifiedpush';
       });
       if (widget.profile != null) {
         final updated = widget.profile!.copyWith(
-          pushProvider: 'fcm',
-          pushToken: fcmToken,
+          pushProvider: 'unifiedpush',
+          pushToken: upEndpoint,
         );
         await _storageService.saveProfile(updated);
         widget.onProfileSaved?.call(updated);
@@ -416,7 +416,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     String? token = widget.profile?.pushToken;
     if (token == null && _selectedPushProvider == 'fcm') {
-      token = await _pushService.getFCMToken();
+      token = await _pushService.getUpEndpoint();
     }
 
     final profile = UserProfile(

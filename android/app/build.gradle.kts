@@ -72,18 +72,13 @@ android {
         }
     }
 
+    // Single flavor: FOSS with UnifiedPush only
     flavorDimensions += "distribution"
 
     productFlavors {
         create("fdroid") {
             dimension = "distribution"
             applicationIdSuffix = ""
-            // Flavor FOSS: UnifiedPush only, no Firebase
-        }
-        create("playstore") {
-            dimension = "distribution"
-            applicationIdSuffix = ""
-            // Flavor completo: FCM + UnifiedPush
         }
     }
 }
@@ -102,28 +97,10 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.0")
-
-    // Firebase/FCM: solo per il flavor playstore
-    "playstoreImplementation"(platform("com.google.firebase:firebase-bom:33.16.0"))
-    "playstoreImplementation"("com.google.firebase:firebase-messaging")
-}
-
-// Esclude le librerie Firebase/GMS da TUTTE le configurazioni del flavor fdroid
-// Garantisce che l'APK F-Droid sia privo di qualsiasi bytecode Google Firebase
-configurations.matching { it.name.startsWith("fdroid") }.configureEach {
-    exclude(group = "com.google.firebase")
-    exclude(group = "com.google.android.gms")
-    exclude(group = "com.google.android.datatransport")
 }
 
 configurations.all {
     exclude(group = "com.google.crypto.tink", module = "tink")
-}
-
-// Applica il plugin google-services SOLO per il flavor playstore
-// (richiede google-services.json solo in quel caso)
-if (gradle.startParameter.taskNames.any { it.contains("playstore", ignoreCase = true) }) {
-    apply(plugin = "com.google.gms.google-services")
 }
 
 // Disabilita la generazione automatica di GeneratedPluginRegistrant da parte di Flutter.

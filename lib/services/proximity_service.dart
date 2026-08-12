@@ -244,10 +244,10 @@ class ProximityService {
           }
         }
       } else {
-        // Caso FCM (build Play Store)
-        debugPrint('[DEBUG-CATCHME] _registerWithServer(): recupero FCM token...');
-        pushToken = await PushService().getFCMToken();
-        debugPrint('[DEBUG-CATCHME] _registerWithServer(): FCM Token=$pushToken');
+        // Caso UnifiedPush (FOSS)
+        debugPrint('[DEBUG-CATCHME] _registerWithServer(): recupero endpoint UnifiedPush...');
+        pushToken = await PushService().getUpEndpoint();
+        debugPrint('[DEBUG-CATCHME] _registerWithServer(): UnifiedPush endpoint=$pushToken');
       }
     } catch (e) {
       debugPrint('[DEBUG-CATCHME] Errore recupero push token: $e');
@@ -1062,8 +1062,8 @@ class ProximityService {
         bgPushToken = bgProfileToken ?? PushService().lastUpEndpoint;
         debugPrint('[DEBUG-CATCHME] _sendBackgroundLocationUpdate(): UP token=$bgPushToken');
       } else {
-        bgPushToken = await PushService().getFCMToken();
-        debugPrint('[DEBUG-CATCHME] _sendBackgroundLocationUpdate(): FCM token=$bgPushToken');
+        bgPushToken = await PushService().getUpEndpoint();
+        debugPrint('[DEBUG-CATCHME] _sendBackgroundLocationUpdate(): UnifiedPush endpoint=$bgPushToken');
       }
 
       final sharingWith = await _getSharingWithList();

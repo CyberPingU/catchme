@@ -1,8 +1,6 @@
 // dart:io non più necessario — SSL override rimosso
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'screens/main_navigation_screen.dart';
 import 'screens/lock_screen.dart';
 import 'services/auth_service.dart';
@@ -14,9 +12,9 @@ import 'services/notification_service.dart';
 import 'services/push_service.dart';
 
 // Costante compile-time: flutter build apk --dart-define=PUSH_PROVIDER=unifiedpush
-// Nella build F-Droid (unifiedpush) Firebase non viene inizializzato.
-const _pushProvider = String.fromEnvironment('PUSH_PROVIDER', defaultValue: 'fcm');
-const _useFcm = _pushProvider != 'unifiedpush';
+// Il progetto ora usa ESCLUSIVAMENTE UnifiedPush (FOSS).
+const _pushProvider = String.fromEnvironment('PUSH_PROVIDER', defaultValue: 'unifiedpush');
+const _useFcm = false;
 
 
 
@@ -52,12 +50,6 @@ void openChatScreen(String senderHash, {String? defaultNickname}) async {
 
 // SSL: verifica certificati abilitata (nessun override - comportamento di default)
 
-// Handler top-level FCM background — usato solo nella build con FCM
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Eseguito in un Dart isolate separato. FCM mostra la notifica automaticamente.
-}
-
 @pragma('vm:entry-point')
 Future<void> onStart(ServiceInstance service) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -68,16 +60,6 @@ Future<void> onStart(ServiceInstance service) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (_useFcm) {
-    // Build Play Store: inizializza Firebase
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-    try {
-      await Firebase.initializeApp();
-    } catch (e) {
-      debugPrint('Errore inizializzazione Firebase: $e');
-    }
-  }
-  
   // Crea il Notification Channel del Foreground Service PRIMA di configure(),
   // altrimenti Android 14/15 lancia CannotPostForegroundServiceNotificationException.
   // NotificationService.initialize() crea il canale internamente; lo invochiamo
@@ -163,7 +145,6 @@ class _AppInitializerState extends State<AppInitializer> {
   void initState() {
     super.initState();
     _checkLockStatus();
-    if (_useFcm) _setupFCM();
     _setupLocalNotifications();
     _pushService.initialize();
   }
@@ -182,52 +163,6 @@ class _AppInitializerState extends State<AppInitializer> {
         }
       },
     );
-  }
-
-  Future<void> _setupFCM() async {
-    final messaging = FirebaseMessaging.instance;
-
-    // Richiedi permessi esplicitamente (obbligatorio su Android 13+ e iOS)
-    await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-
-    // Mostra la notifica anche quando l'app è in primo piano
-    await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-
-    // Gestisce il click sul banner push quando l'app è in background (ma non spenta)
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      final senderHash = message.data['senderHash'];
-      final senderNickname = message.data['senderNickname'];
-      if (senderHash != null && senderHash.toString().isNotEmpty) {
-        openChatScreen(
-          senderHash.toString(),
-          defaultNickname: senderNickname?.toString(),
-        );
-      }
-    });
-
-    // Gestisce il click sul banner push quando l'app era completamente chiusa/terminata
-    final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
-    if (initialMessage != null) {
-      final senderHash = initialMessage.data['senderHash'];
-      final senderNickname = initialMessage.data['senderNickname'];
-      if (senderHash != null && senderHash.toString().isNotEmpty) {
-        // Attendi un istante per permettere l'inizializzazione del Navigator
-        Future.delayed(const Duration(milliseconds: 1500), () {
-          openChatScreen(
-            senderHash.toString(),
-            defaultNickname: senderNickname?.toString(),
-          );
-        });
-      }
-    }
   }
 
   Future<void> _checkLockStatus() async {

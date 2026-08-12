@@ -4,12 +4,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:unifiedpush/unifiedpush.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'notification_service.dart';
 import 'storage_service.dart';
 
-const _pushProvider = String.fromEnvironment('PUSH_PROVIDER', defaultValue: 'fcm');
-const _useFcm = _pushProvider != 'unifiedpush';
+const _pushProvider = String.fromEnvironment('PUSH_PROVIDER', defaultValue: 'unifiedpush');
+const _useFcm = false;
 
 class PushService {
   static final PushService _instance = PushService._internal();
@@ -52,12 +51,9 @@ class PushService {
   }
 
   Future<void> initialize() async {
-    if (_useFcm) await _setupFCM();
     final profile = await _storageService.loadProfile();
-    // In build F-Droid forziamo sempre UnifiedPush, indipendentemente dalla preferenza salvata
-    if (!_useFcm || (profile != null && profile.pushProvider == 'unifiedpush')) {
-      await initializeUnifiedPush();
-    }
+    // Usa sempre UnifiedPush (FOSS)
+    await initializeUnifiedPush();
   }
 
   // Registra i callback di UnifiedPush
@@ -146,32 +142,13 @@ class PushService {
 
   void _onUnifiedPushFailed(FailedReason reason, String instance) async {
     debugPrint('[PushService] Registrazione UnifiedPush fallita: ${reason.toString()}');
-
-    if (_useFcm) {
-      // Build Play Store: torna su FCM automaticamente
-      debugPrint('[PushService] Fallback automatico su FCM');
-      final fcmToken = await getFCMToken();
-      final profile = await _storageService.loadProfile();
-      if (profile != null) {
-        await _storageService.saveProfile(profile.copyWith(
-          pushProvider: 'fcm',
-          pushToken: fcmToken,
-        ));
-      }
-      await _notificationService.showNewMessageNotification(
-        'system_fallback',
-        'CatchMe',
-        'Nessun distributore UnifiedPush trovato. Passato automaticamente a FCM.',
-      );
-    } else {
-      // Build F-Droid: nessun FCM disponibile, avvisa l'utente
-      upFailed = true;
-      await _notificationService.showNewMessageNotification(
-        'system_no_push',
-        'CatchMe — Notifiche non disponibili',
-        'Installa ntfy (o un altro distributore UnifiedPush) per ricevere notifiche quando l\'app è chiusa.',
-      );
-    }
+    // Nessun fallback FCM disponibile (FOSS)
+    upFailed = true;
+    await _notificationService.showNewMessageNotification(
+      'system_no_push',
+      'CatchMe — Notifiche non disponibili',
+      'Installa ntfy (o un altro distributore UnifiedPush) per ricevere notifiche quando l\'app è chiusa.',
+    );
   }
 
   void _onUnifiedPushUnregistered(String instance) {
@@ -202,34 +179,6 @@ class PushService {
     }
   }
 
-  Future<void> _setupFCM() async {
-    if (!_useFcm) return;
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-      debugPrint('[PushService] Messaggio FCM in primo piano: ${message.data}');
-      final type = message.data['type'];
-      if (type == 'message') {
-        final senderHash = message.data['senderHash'] ?? '';
-        final senderNickname = message.data['senderNickname'] ?? 'Sconosciuto';
-        final content = message.data['content'] ?? '';
-        await _notificationService.showNewMessageNotification(
-          senderHash,
-          senderNickname,
-          content,
-        );
-      }
-    });
-  }
-
-  // Ottiene il token FCM corrente (null nella build F-Droid)
-  Future<String?> getFCMToken() async {
-    if (!_useFcm) return null;
-    try {
-      return await FirebaseMessaging.instance.getToken();
-    } catch (e) {
-      debugPrint('[PushService] Errore recupero token FCM: $e');
-      return null;
-    }
-  }
 
   // Abilita UnifiedPush (registra un distributore)
   Future<void> registerUnifiedPush(String distributor) async {
