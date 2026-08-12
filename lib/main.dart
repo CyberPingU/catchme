@@ -84,7 +84,7 @@ void main() async {
     await service.configure(
       androidConfiguration: AndroidConfiguration(
         onStart: onStart,
-        autoStart: true,
+        autoStart: false, // Disabilita autoStart per Android 14+ per evitare crash
         isForegroundMode: true,
         notificationChannelId: 'catchme_gps_tracking',
         initialNotificationTitle: 'CatchMe GPS Service',

@@ -46,6 +46,12 @@ class PushServiceFCM implements PushServiceInterface {
       onUnregistered: _onUnifiedPushUnregistered,
       onMessage: _onUnifiedPushMessage,
     );
+
+    // Registrazione automatica per UnifiedPush quando selezionato
+    final profile = await _storageService.loadProfile();
+    if (profile != null && profile.pushProvider == 'unifiedpush') {
+      await UnifiedPush.register();
+    }
   }
 
   Future<void> _setupFCM() async {

@@ -47,7 +47,7 @@
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="location"
             android:exported="true"
-            tools:replace="android:exported" />
+            tools:replace="android:exported,android:foregroundServiceType" />
 
         <receiver android:name="org.unifiedpush.flutter.connector.Receiver"
                   android:enabled="true"
@@ -59,6 +59,13 @@
                 <action android:name="org.unifiedpush.action.UNREGISTERED"/>
             </intent-filter>
         </receiver>
+
+        <!-- Servizio Geolocator per Android 14+ -->
+        <service
+            android:name="com.baseflow.geolocator.location.LocationService"
+            android:foregroundServiceType="location"
+            android:exported="false"
+            tools:replace="android:foregroundServiceType" />
 
         <meta-data
             android:name="flutterEmbedding"

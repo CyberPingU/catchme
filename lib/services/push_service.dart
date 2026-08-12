@@ -42,6 +42,11 @@ class PushService {
       onUnregistered: _onUnifiedPushUnregistered,
       onMessage: _onUnifiedPushMessage,
     );
+
+    // Registrazione automatica per UnifiedPush nella build F-Droid
+    if (!_useFcm) {
+      await UnifiedPush.register();
+    }
   }
 
   // Quando viene generato un nuovo endpoint UnifiedPush

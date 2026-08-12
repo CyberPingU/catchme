@@ -21,6 +21,13 @@ android {
     compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
+    // Configurazione per Android 15 (API 35) - page size 16 KB
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -33,6 +40,11 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        
+        // Configurazione per Android 15 (API 35)
+        ndk {
+            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
+        }
     }
 
     buildTypes {
