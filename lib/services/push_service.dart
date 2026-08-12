@@ -7,8 +7,6 @@ import 'package:unifiedpush/unifiedpush.dart';
 import 'notification_service.dart';
 import 'storage_service.dart';
 
-const _pushProvider = String.fromEnvironment('PUSH_PROVIDER', defaultValue: 'unifiedpush');
-const _useFcm = false;
 
 class PushService {
   static final PushService _instance = PushService._internal();
@@ -51,7 +49,6 @@ class PushService {
   }
 
   Future<void> initialize() async {
-    final profile = await _storageService.loadProfile();
     // Usa sempre UnifiedPush (FOSS)
     await initializeUnifiedPush();
   }
@@ -71,36 +68,34 @@ class PushService {
     // Registrazione esplicita con il distributore già noto (es. ntfy).
     // Senza questa chiamata ntfy non riceve mai l'Intent e onNewEndpoint
     // non viene mai invocato → race condition / timeout.
-    if (!_useFcm) {
-      final distributor = await UnifiedPush.getDistributor();
-      debugPrint('[PushService] initializeUnifiedPush(): distributore corrente="$distributor"');
+    final distributor = await UnifiedPush.getDistributor();
+    debugPrint('[PushService] initializeUnifiedPush(): distributore corrente="$distributor"');
 
-      if (distributor != null && distributor.isNotEmpty) {
-        // Distributore già selezionato: registra direttamente senza dialog
-        debugPrint('[PushService] initializeUnifiedPush(): chiamo UnifiedPush.register() con distributore=$distributor');
+    if (distributor != null && distributor.isNotEmpty) {
+      // Distributore già selezionato: registra direttamente senza dialog
+      debugPrint('[PushService] initializeUnifiedPush(): chiamo UnifiedPush.register() con distributore=$distributor');
+      await UnifiedPush.register();
+    } else {
+      // Nessun distributore salvato: cerca quelli disponibili
+      final distributors = await UnifiedPush.getDistributors();
+      debugPrint('[PushService] initializeUnifiedPush(): distributori disponibili=$distributors');
+
+      if (distributors.length == 1) {
+        // Un solo distributore installato: selezionalo e registra automaticamente
+        debugPrint('[PushService] initializeUnifiedPush(): seleziono automaticamente ${distributors.first}');
+        await UnifiedPush.saveDistributor(distributors.first);
+        await UnifiedPush.register();
+      } else if (distributors.isNotEmpty) {
+        // Più distributori: seleziona il primo (ntfy ha priorità se presente)
+        final preferred = distributors.firstWhere(
+          (d) => d.contains('ntfy'),
+          orElse: () => distributors.first,
+        );
+        debugPrint('[PushService] initializeUnifiedPush(): seleziono $preferred tra $distributors');
+        await UnifiedPush.saveDistributor(preferred);
         await UnifiedPush.register();
       } else {
-        // Nessun distributore salvato: cerca quelli disponibili
-        final distributors = await UnifiedPush.getDistributors();
-        debugPrint('[PushService] initializeUnifiedPush(): distributori disponibili=$distributors');
-
-        if (distributors.length == 1) {
-          // Un solo distributore installato: selezionalo e registra automaticamente
-          debugPrint('[PushService] initializeUnifiedPush(): seleziono automaticamente ${distributors.first}');
-          await UnifiedPush.saveDistributor(distributors.first);
-          await UnifiedPush.register();
-        } else if (distributors.isNotEmpty) {
-          // Più distributori: seleziona il primo (ntfy ha priorità se presente)
-          final preferred = distributors.firstWhere(
-            (d) => d.contains('ntfy'),
-            orElse: () => distributors.first,
-          );
-          debugPrint('[PushService] initializeUnifiedPush(): seleziono $preferred tra $distributors');
-          await UnifiedPush.saveDistributor(preferred);
-          await UnifiedPush.register();
-        } else {
-          debugPrint('[PushService] initializeUnifiedPush(): nessun distributore UP installato.');
-        }
+        debugPrint('[PushService] initializeUnifiedPush(): nessun distributore UP installato.');
       }
     }
   }

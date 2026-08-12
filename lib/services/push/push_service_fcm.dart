@@ -1,3 +1,4 @@
+// ignore_for_file: uri_does_not_exist, undefined_identifier, undefined_class, depend_on_referenced_packages
 // Implementazione FCM per Play Store
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
