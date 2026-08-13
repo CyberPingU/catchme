@@ -300,8 +300,7 @@ class _RadarScreenState extends State<RadarScreen> with WidgetsBindingObserver {
                     itemBuilder: (context, index) {
                       final user = strangerUsers[index];
                       final contact = _contactsCache[user.endpointId];
-                      final hasPhoto = contact?.avatarPath != null;
-                      
+                      final hasPhoto = contact?.avatarPath != null && File(contact!.avatarPath!).existsSync(); 
                       return Card(
                         margin: const EdgeInsets.only(bottom: 12),
                         child: ListTile(

@@ -213,33 +213,36 @@ class StorageService {
   }
 
   // Gestione foto profilo contatti
-  Future<String> saveContactPhoto(String contactId, List<int> photoBytes) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final photosDir = Directory('${directory.path}/contact_photos');
-    
-    // Crea la directory se non esiste
-    if (!await photosDir.exists()) {
-      await photosDir.create(recursive: true);
-    }
-    
-    final filePath = '${photosDir.path}/$contactId.jpg';
-    final file = File(filePath);
-    await file.writeAsBytes(photoBytes);
-    
-    return filePath;
+Future<String> saveContactPhoto(String contactId, List<int> photoBytes) async {
+  final directory = await getApplicationDocumentsDirectory();
+  final photosDir = Directory('${directory.path}/contact_photos');
+  
+  if (!await photosDir.exists()) {
+    await photosDir.create(recursive: true);
   }
 
-  Future<File?> getContactPhoto(String contactId) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final filePath = '${directory.path}/contact_photos/$contactId.jpg';
-    final file = File(filePath);
-    
-    if (await file.exists()) {
-      return file;
-    }
-    return null;
-  }
+  // Sanifica l'ID rimuovendo caratteri non validi per il nome file
+  final safeId = contactId.replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
+  final filePath = '${photosDir.path}/$safeId.jpg';
+  
+  final file = File(filePath);
+  // flush: true garantisce che i byte siano scritti fisicamente sul disco
+  await file.writeAsBytes(photoBytes, flush: true);
 
+  return filePath;
+}
+
+Future<File?> getContactPhoto(String contactId) async {
+  final directory = await getApplicationDocumentsDirectory();
+  final safeId = contactId.replaceAll(RegExp(r'[/\\?%*:|"<>]'), '_');
+  final filePath = '${directory.path}/contact_photos/$safeId.jpg';
+  
+  final file = File(filePath);
+  if (await file.exists()) {
+    return file;
+  }
+  return null;
+}
   Future<void> deleteContactPhoto(String contactId) async {
     final directory = await getApplicationDocumentsDirectory();
     final filePath = '${directory.path}/contact_photos/$contactId.jpg';

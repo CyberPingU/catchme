@@ -414,7 +414,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _sendPhoto() async {
     final profile = await _storageService.loadProfile();
-    if (profile?.avatarPath == null) {
+    if (profile?.avatarPath == null || profile!.avatarPath!.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Non hai una foto profilo da condividere')),
@@ -424,9 +424,9 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     try {
-      final file = File(profile!.avatarPath!);
+      final file = File(profile.avatarPath!);
       if (!await file.exists()) {
-        throw Exception('File foto non trovato');
+        throw Exception('File foto non trovato su disco');
       }
 
       // Comprimi l'immagine a 120x120 pixel usando la libreria image
@@ -730,7 +730,9 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       );
     } else if (message.type == MessageType.image) {
-      final fileExists = message.localFilePath != null && File(message.localFilePath!).existsSync();
+      final path = message.localFilePath;
+      final fileExists = path != null && path.isNotEmpty && File(path).existsSync();
+
       return GestureDetector(
         onTap: fileExists
             ? () {
@@ -747,7 +749,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       body: Center(
                         child: InteractiveViewer(
                           maxScale: 4.0,
-                          child: Image.file(File(message.localFilePath!)),
+                          child: Image.file(
+                            File(path!),
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.broken_image, color: Colors.white54, size: 64),
+                          ),
                         ),
                       ),
                     ),
@@ -761,15 +767,27 @@ class _ChatScreenState extends State<ChatScreen> {
             borderRadius: BorderRadius.circular(12),
             child: fileExists
                 ? Image.file(
-                    File(message.localFilePath!),
+                    File(path!),
                     fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      padding: const EdgeInsets.all(12),
+                      color: Colors.grey.shade800,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.broken_image, color: Colors.white54),
+                          SizedBox(width: 8),
+                          Text('Immagine non valida', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                        ],
+                      ),
+                    ),
                   )
                 : Container(
                     padding: const EdgeInsets.all(12),
                     color: Colors.grey.shade800,
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
-                      children: const [
+                      children: [
                         Icon(Icons.broken_image, color: Colors.white54),
                         SizedBox(width: 8),
                         Text('Immagine non trovata', style: TextStyle(color: Colors.white54, fontSize: 13)),
