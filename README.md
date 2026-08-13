@@ -1,20 +1,11 @@
 # CatchMe
+## Proximity-based Encrypted Messaging App
 
-<p align="center">
-  <img src="assets/icon/icon.png" alt="CatchMe Logo" width="100"/>
-</p>
+Discover and chat with people nearby — without ever sharing your identity or exact location with a central server.
 
-<p align="center">
-  <strong>Proximity-based encrypted messaging app</strong><br/>
-  Discover and chat with people nearby — without ever sharing your identity or exact location with a central server.
-</p>
+---
 
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3"/></a>
-  <img src="https://img.shields.io/badge/Platform-Android-green.svg" alt="Platform: Android"/>
-  <img src="https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter" alt="Flutter"/>
-  <img src="https://img.shields.io/badge/UnifiedPush-compatible-purple" alt="UnifiedPush"/>
-</p>
+**License:** AGPL v3 | **Platform:** Android | **Framework:** Flutter 3.x | **Push:** UnifiedPush Compatible
 
 ---
 
@@ -22,38 +13,35 @@
 
 CatchMe connects to a lightweight relay server that knows only your **approximate GPS position** and a **public key hash** (no email, no phone number, no account). Users within the chosen proximity radius appear on the radar. All messages are **end-to-end encrypted** (ECDH X25519 + AES-GCM): the server only routes encrypted blobs it cannot read.
 
-- 📡 **Proximity discovery** via GPS + server relay
-- 🔐 **End-to-end encryption** — server sees only ciphertext
-- 👤 **No account required** — identity is a cryptographic key pair generated on device
-- 📍 **Optional location sharing** with trusted contacts (permanent or one-shot)
-- 🔔 **Push notifications** via FCM (Google) or UnifiedPush (FOSS)
-- 🏷️ **Adjustable radar range** — 500m to 1000km, user-controlled
-- 📋 **Contact list** with groups, last-seen distance, profile photos on request
-- 🔒 **Biometric app lock** (optional)
-
----
+- **📡 Proximity discovery** via GPS + server relay
+- **🔐 End-to-end encryption** — server sees only ciphertext
+- **👤 No account required** — identity is a cryptographic key pair generated on device
+- **📍 Optional location sharing** with trusted contacts (permanent or one-shot)
+- **🔔 Push notifications** via FCM (Google) or UnifiedPush (FOSS)
+- **🏷 Adjusting radar range** — 500m to 1000km, user-controlled
+- **📋 Contact list** with groups, last-seen distance, profile photos on request
+- **🔒 Biometric app lock** (optional)
 
 ## Build Flavors
 
-| Flavor | Push notifications | Suitable for |
-|---|---|---|
-| `foss` | UnifiedPush only | **F-Droid**, privacy-focused users |
-| `full` | FCM + UnifiedPush | GitHub Releases, Obtainium, GMS devices |
+| **Flavor** | **Branch** | **Push Notifications** | **Suitable for** |
+|------------|------------|------------------------|------------------|
+| `fdroid` | `main` | UnifiedPush only | **F-Droid**, pure FOSS, privacy-focused |
+| `playstore` | `full` | FCM (Google) + UnifiedPush | Google Play Store, GMS devices, Obtainium |
 
-### Build FOSS flavor (UnifiedPush only)
+### Build FOSS Flavor (UnifiedPush only)
+*Run on `main` branch:*
 ```bash
 flutter pub get
-flutter build apk --release --flavor foss -t lib/main_foss.dart
+flutter build apk --release --flavor fdroid --dart-define=PUSH_PROVIDER=unifiedpush
 ```
 
-### Build full flavor (FCM + UnifiedPush)
-> Requires `android/app/google-services.json` from your own Firebase project.
+### Build Full Flavor (FCM + UnifiedPush)
+*Run on `full` branch (requires `android/app/google-services.json` from your Firebase project):*
 ```bash
 flutter pub get
-flutter build apk --release --flavor full -t lib/main.dart
+flutter build apk --release --flavor playstore --dart-define=PUSH_PROVIDER=fcm
 ```
-
----
 
 ## Self-hosting the Server
 
@@ -64,7 +52,6 @@ The relay server is a Node.js WebSocket server. It requires **no database** — 
 - (Optional) Firebase project for FCM push notifications
 
 ### Setup
-
 ```bash
 cd server
 npm install
@@ -75,10 +62,9 @@ Create your Firebase service account key (for FCM push) and place it in `server/
 server/your-firebase-adminsdk-key.json
 ```
 
-> ⚠️ **Never commit this file.** It is already in `.gitignore`.
+**Note:** *Never commit this file. It is already in `.gitignore`.*
 
 ### Run
-
 ```bash
 # Default proximity radius: 500m
 node server.js
@@ -91,8 +77,7 @@ node server.js --distance 500m
 The server persists state to `server/server_db.json` automatically (survives restarts).
 
 ### Run with systemd (recommended for VPS)
-
-```ini
+```systemd
 [Unit]
 Description=CatchMe Proximity Server
 After=network.target
@@ -108,54 +93,49 @@ User=catchme
 WantedBy=multi-user.target
 ```
 
----
-
 ## Client Configuration
 
 Point the app at your server by editing `lib/services/proximity_service.dart`:
-
-```dart
+```java
 static const String _serverUrl = 'wss://your-server.example.com:3000';
 ```
 
-> For production, put the WebSocket server behind a reverse proxy (nginx/Caddy) with a valid TLS certificate.
-
----
+*For production, put the WebSocket server behind a reverse proxy (nginx/Caddy) with a valid TLS certificate.*
 
 ## Project Structure
 
 ```
-├── lib/
-│   ├── main.dart                       # Entry point (full flavor)
-│   ├── main_foss.dart                  # Entry point (FOSS flavor)
-│   ├── models/
-│   │   ├── user_profile.dart           # Local user profile model
-│   │   ├── nearby_user.dart            # Nearby user model
-│   │   ├── chat_message.dart           # Chat message model
-│   │   └── contact.dart               # Saved contact model
-│   ├── services/
-│   │   ├── proximity_service.dart      # WebSocket client, E2E crypto, radar
-│   │   ├── crypto_service.dart         # ECDH X25519 + AES-GCM encryption
-│   │   ├── storage_service.dart        # Local storage (SharedPreferences + files)
-│   │   ├── notification_service.dart   # Local + push notifications
-│   │   └── unifiedpush_service.dart    # UnifiedPush integration
-│   └── screens/
-│       ├── main_screen.dart            # Main tab navigator
-│       ├── radar_screen.dart           # Nearby users radar
-│       ├── chat_screen.dart            # Chat UI
-│       ├── contacts_screen.dart        # Saved contacts list
-│       └── profile_screen.dart         # User profile settings
-└── server/
-    ├── server.js                       # Node.js WebSocket relay server
-    └── package.json
+lib/
+├── main.dart                       # App entry point & dependency injection
+├── models/
+│   ├── user_profile.dart           # Local user profile model
+│   ├── nearby_user.dart            # Nearby user model
+│   ├── chat_message.dart           # Chat message model
+│   └── contact.dart                # Saved contact model
+├── services/
+│   ├── proximity_service.dart      # WebSocket client, E2E crypto, radar
+│   ├── crypto_service.dart         # ECDH X25519 + AES-GCM encryption
+│   ├── storage_service.dart        # Local storage & sanitized photo I/O
+│   ├── notification_service.dart   # Local notifications
+│   └── push/                       # Modular push notification providers
+│       ├── push_service.dart       # Abstract push interface
+│       ├── push_service_fcm.dart   # Firebase Cloud Messaging provider
+│       └── push_service_unifiedpush.dart # UnifiedPush provider
+└── screens/
+    ├── main_screen.dart            # Main tab navigator
+    ├── radar_screen.dart           # Nearby users radar
+    ├── chat_screen.dart            # Chat UI & photo viewer
+    ├── contacts_screen.dart        # Saved contacts list
+    └── profile_screen.dart         # User profile settings
+server/
+├── server.js                       # Node.js WebSocket relay server
+└── package.json
 ```
-
----
 
 ## Privacy & Permissions
 
-| Permission | Reason |
-|---|---|
+| **Permission** | **Reason** |
+|----------------|------------|
 | `ACCESS_FINE_LOCATION` | GPS for proximity detection |
 | `INTERNET` | WebSocket connection to relay server |
 | `POST_NOTIFICATIONS` | Push notification delivery |
@@ -169,10 +149,6 @@ The relay server stores:
 
 No account, no email, no phone number is ever required or stored.
 
----
-
 ## License
 
 CatchMe is free software: you can redistribute it and/or modify it under the terms of the **GNU Affero General Public License** as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
-
-See [LICENSE](LICENSE) for the full text.
