@@ -292,11 +292,9 @@ class ProximityService {
   Future<void> _fetchAndSendCurrentLocation() async {
     try {
       final pos = await Geolocator.getCurrentPosition(
- 	locationSettings: AndroidSettings(
-    	accuracy: LocationAccuracy.medium,
-    	forceLocationManager: true, // <-- QUESTO DISATTIVA GOOGLE PLAY SERVICES!
-  	),
-   );
+  	desiredAccuracy: LocationAccuracy.medium,
+  	forceAndroidLocationManager: true,
+	);
       if (_isConnected && _channel != null) {
         final sharingWith = await _getSharingWithList();
         final payload = {
@@ -321,7 +319,10 @@ class ProximityService {
     if (!_isConnected || _channel == null) return;
 
     try {
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium);
+	final pos = await Geolocator.getCurrentPosition(
+  desiredAccuracy: LocationAccuracy.medium,
+  forceAndroidLocationManager: true,
+);
       final sharingWith = await _getSharingWithList();
       final payload = {
         'type': 'location_update',
@@ -619,7 +620,10 @@ class ProximityService {
         Position? myPos;
         try {
           myPos = await Geolocator.getLastKnownPosition();
-          myPos ??= await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium).timeout(const Duration(seconds: 2));
+	  myPos ??= await Geolocator.getCurrentPosition(
+  desiredAccuracy: LocationAccuracy.medium,
+  forceAndroidLocationManager: true,
+).timeout(const Duration(seconds: 2));
         } catch (_) {}
         
         double? distance;
@@ -883,7 +887,10 @@ class ProximityService {
         await Future.delayed(const Duration(milliseconds: 1000));
       }
       
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium);
+      final pos = await Geolocator.getCurrentPosition(
+  desiredAccuracy: LocationAccuracy.medium,
+  forceAndroidLocationManager: true,
+);
       final sharingWith = await _getSharingWithList();
       final payload = {
         'type': 'location_update',
@@ -1026,8 +1033,10 @@ class ProximityService {
     WebSocketChannel? tempChannel;
     try {
       // 1. Rileva posizione GPS (precisione media per consumare meno batteria al chiuso/background)
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium);
-      
+     final pos = await Geolocator.getCurrentPosition(
+  desiredAccuracy: LocationAccuracy.medium,
+  forceAndroidLocationManager: true,
+); 
       // 2. Connettiti temporaneamente al server
       final url = await _getServerUrl();
       debugPrint('[DEBUG-CATCHME] Connessione temporanea background a: $url');
@@ -1214,7 +1223,10 @@ class ProximityService {
 
     Position? pos;
     try {
-      pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      pos = await Geolocator.getCurrentPosition(
+  desiredAccuracy: LocationAccuracy.medium,
+  forceAndroidLocationManager: true,
+);
     } catch (_) {}
 
     if (permanent) {
