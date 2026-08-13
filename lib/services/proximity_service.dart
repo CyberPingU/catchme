@@ -16,7 +16,7 @@ import 'storage_service.dart';
 import 'notification_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'push_service.dart';
-
+import 'package:geolocator_android/geolocator_android.dart';
 
 class ProximityService {
   static final ProximityService _instance = ProximityService._internal();
@@ -291,7 +291,12 @@ class ProximityService {
 
   Future<void> _fetchAndSendCurrentLocation() async {
     try {
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium);
+      final pos = await Geolocator.getCurrentPosition(
+ 	locationSettings: AndroidSettings(
+    	accuracy: LocationAccuracy.medium,
+    	forceLocationManager: true, // <-- QUESTO DISATTIVA GOOGLE PLAY SERVICES!
+  	),
+   );
       if (_isConnected && _channel != null) {
         final sharingWith = await _getSharingWithList();
         final payload = {
