@@ -6,9 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:unifiedpush/unifiedpush.dart';
 import 'notification_service.dart';
 import 'storage_service.dart';
+import 'push/push_service_fcm.dart';
 
 const _pushProvider = String.fromEnvironment('PUSH_PROVIDER', defaultValue: 'unifiedpush');
-const _useFcm = false;
 
 class PushService {
   static final PushService _instance = PushService._internal();
@@ -52,8 +52,54 @@ class PushService {
 
   Future<void> initialize() async {
     final profile = await _storageService.loadProfile();
-    // Usa sempre UnifiedPush (FOSS)
+    
+    // Determina il provider: dal profilo salvato, altrimenti dal flag di compilazione env
+    final effectiveProvider = profile?.pushProvider ?? _pushProvider;
+
+    if (effectiveProvider == 'fcm') {
+      await PushServiceFCM().initialize();
+    } else {
+      await initializeUnifiedPush();
+    }
+  }
+
+  /// Esegue lo switch runtime a FCM aggiornando il profilo e pulendo la cache UP
+  Future<void> switchToFcm() async {
+    // 1. Unregister da UnifiedPush e pulisci la cache locale UP
+    try {
+      await UnifiedPush.unregister();
+      _lastUpEndpoint = null;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_upEndpointPrefKey);
+    } catch (e) {
+      debugPrint('[PushService] Errore unregister UnifiedPush: $e');
+    }
+
+    // 2. Inizializza FCM
+    final fcmService = PushServiceFCM();
+    await fcmService.initialize();
+    final fcmToken = await fcmService.getPushToken();
+
+    // 3. Salva la preferenza FCM nel profilo
+    final profile = await _storageService.loadProfile();
+    if (profile != null && fcmToken != null) {
+      final updatedProfile = profile.copyWith(
+        pushProvider: 'fcm',
+        pushToken: fcmToken,
+      );
+      await _storageService.saveProfile(updatedProfile);
+      debugPrint('[PushService] Switch a FCM completato con token: $fcmToken');
+    }
+  }
+
+  /// Esegue lo switch runtime a UnifiedPush aggiornando il profilo
+  Future<void> switchToUnifiedPush(String distributor) async {
     await initializeUnifiedPush();
+    await UnifiedPush.saveDistributor(distributor);
+    await UnifiedPush.register();
+
+    // Il callback _onUnifiedPushEndpoint provvederà ad aggiornare 
+    // il profilo con pushProvider: 'unifiedpush' e il nuovo endpoint.
   }
 
   // Registra i callback di UnifiedPush
@@ -68,29 +114,26 @@ class PushService {
       onMessage: _onUnifiedPushMessage,
     );
 
-    // Registrazione esplicita con il distributore già noto (es. ntfy).
-    // Senza questa chiamata ntfy non riceve mai l'Intent e onNewEndpoint
-    // non viene mai invocato → race condition / timeout.
-    if (!_useFcm) {
+    // Registra con UP solo se il profilo salvato/effettivo non è impostato su FCM
+    final profile = await _storageService.loadProfile();
+    final effectiveProvider = profile?.pushProvider ?? _pushProvider;
+
+    if (effectiveProvider != 'fcm') {
       final distributor = await UnifiedPush.getDistributor();
       debugPrint('[PushService] initializeUnifiedPush(): distributore corrente="$distributor"');
 
       if (distributor != null && distributor.isNotEmpty) {
-        // Distributore già selezionato: registra direttamente senza dialog
         debugPrint('[PushService] initializeUnifiedPush(): chiamo UnifiedPush.register() con distributore=$distributor');
         await UnifiedPush.register();
       } else {
-        // Nessun distributore salvato: cerca quelli disponibili
         final distributors = await UnifiedPush.getDistributors();
         debugPrint('[PushService] initializeUnifiedPush(): distributori disponibili=$distributors');
 
         if (distributors.length == 1) {
-          // Un solo distributore installato: selezionalo e registra automaticamente
           debugPrint('[PushService] initializeUnifiedPush(): seleziono automaticamente ${distributors.first}');
           await UnifiedPush.saveDistributor(distributors.first);
           await UnifiedPush.register();
         } else if (distributors.isNotEmpty) {
-          // Più distributori: seleziona il primo (ntfy ha priorità se presente)
           final preferred = distributors.firstWhere(
             (d) => d.contains('ntfy'),
             orElse: () => distributors.first,
@@ -104,7 +147,17 @@ class PushService {
       }
     }
   }
+ /// Restituisce il token push attivo (FCM o UP)
+  Future<String?> getPushToken() async {
+    final profile = await _storageService.loadProfile();
+    final effectiveProvider = profile?.pushProvider ?? _pushProvider;
 
+    if (effectiveProvider == 'fcm') {
+      return await PushServiceFCM().getPushToken();
+    } else {
+      return await getUpEndpoint();
+    }
+  }
   // Quando viene generato un nuovo endpoint UnifiedPush
   Future<void> _onUnifiedPushEndpoint(PushEndpoint endpoint, String instance) async {
     final endpointUrl = endpoint.url;
@@ -112,9 +165,6 @@ class PushService {
     _lastUpEndpoint = endpointUrl;
     _upEndpointController.add(endpointUrl);
 
-    // Persisti sempre in SharedPreferences come cache resiliente:
-    // garantisce che l'endpoint sopravviva anche se il profilo non è ancora
-    // stato creato al momento del callback (race condition al primo avvio).
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_upEndpointPrefKey, endpointUrl);
@@ -123,7 +173,6 @@ class PushService {
       debugPrint('[PushService] onNewEndpoint: errore salvataggio SharedPreferences: $e');
     }
 
-    // Aggiorna anche il profilo se disponibile
     final profile = await _storageService.loadProfile();
     if (profile != null) {
       final updatedProfile = profile.copyWith(
@@ -133,16 +182,12 @@ class PushService {
       await _storageService.saveProfile(updatedProfile);
       debugPrint('[PushService] onNewEndpoint: profilo aggiornato con endpoint UP: $endpointUrl');
     } else {
-      // Profilo non ancora creato: l'endpoint è già in SharedPreferences e in
-      // _lastUpEndpoint. Quando il profilo verrà creato/salvato, il chiamante
-      // dovrà includere pushToken = PushService().lastUpEndpoint.
       debugPrint('[PushService] onNewEndpoint: profilo non trovato — endpoint in cache SharedPreferences/$_upEndpointPrefKey');
     }
   }
 
   void _onUnifiedPushFailed(FailedReason reason, String instance) async {
     debugPrint('[PushService] Registrazione UnifiedPush fallita: ${reason.toString()}');
-    // Nessun fallback FCM disponibile (FOSS)
     upFailed = true;
     await _notificationService.showNewMessageNotification(
       'system_no_push',
@@ -161,13 +206,13 @@ class PushService {
       final payloadStr = utf8.decode(message.content);
       debugPrint('[PushService] Messaggio UnifiedPush ricevuto: $payloadStr');
       final data = json.decode(payloadStr) as Map<String, dynamic>;
-      
+          
       final type = data['type'] as String?;
       if (type == 'message') {
         final senderHash = data['senderHash'] as String? ?? '';
         final senderNickname = data['senderNickname'] as String? ?? 'Sconosciuto';
         final content = data['content'] as String? ?? '';
-        
+            
         await _notificationService.showNewMessageNotification(
           senderHash,
           senderNickname,
@@ -178,7 +223,6 @@ class PushService {
       debugPrint('[PushService] Errore parsing messaggio UnifiedPush: $e');
     }
   }
-
 
   // Abilita UnifiedPush (registra un distributore)
   Future<void> registerUnifiedPush(String distributor) async {

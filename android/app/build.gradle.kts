@@ -1,13 +1,13 @@
 import java.util.Properties
 
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    // google-services viene applicato solo se il flavor lo richiede (vedi sotto)
+    id("com.google.gms.google-services")
 }
-
 // Leggi key.properties se esiste (non committato nel repo)
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
@@ -77,6 +77,10 @@ android {
 
     productFlavors {
         create("fdroid") {
+            dimension = "distribution"
+            applicationIdSuffix = ""
+        }
+	create("playstore") {
             dimension = "distribution"
             applicationIdSuffix = ""
         }

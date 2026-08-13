@@ -1,11 +1,41 @@
-// Implementazione FCM per Play Store
+// Implementazione FCM per Play Store / Full
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:unifiedpush/unifiedpush.dart';
 import 'push_service_interface.dart';
 import '../notification_service.dart';
 import '../storage_service.dart';
+
+/// Handler di background top-level
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  final notificationService = NotificationService();
+  final data = message.data;
+  final payload = data['payload'];
+
+  if (payload != null) {
+    try {
+      final decoded = json.decode(payload) as Map<String, dynamic>;
+      final senderHash = decoded['senderHash'] as String? ?? '';
+      final senderNickname = decoded['senderNickname'] as String? ?? 'Sconosciuto';
+      final content = decoded['content'] as String? ?? '';
+
+      await notificationService.showNewMessageNotification(
+        senderHash,
+        senderNickname,
+        content,
+      );
+    } catch (_) {
+      await notificationService.showNotification(
+        'Nuovo messaggio',
+        'Hai ricevuto un nuovo messaggio',
+        payload: payload.toString(),
+      );
+    }
+  }
+}
 
 class PushServiceFCM implements PushServiceInterface {
   static final PushServiceFCM _instance = PushServiceFCM._internal();
@@ -28,6 +58,16 @@ class PushServiceFCM implements PushServiceInterface {
 
   @override
   Future<void> initialize() async {
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp();
+      }
+    } catch (e) {
+      debugPrint('[PushServiceFCM] Errore Firebase.initializeApp(): $e');
+    }
+
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
     await _setupFCM();
     final profile = await _storageService.loadProfile();
     if (profile != null && profile.pushProvider == 'unifiedpush') {
@@ -47,7 +87,6 @@ class PushServiceFCM implements PushServiceInterface {
       onMessage: _onUnifiedPushMessage,
     );
 
-    // Registrazione automatica per UnifiedPush quando selezionato
     final profile = await _storageService.loadProfile();
     if (profile != null && profile.pushProvider == 'unifiedpush') {
       await UnifiedPush.register();
@@ -57,21 +96,33 @@ class PushServiceFCM implements PushServiceInterface {
   Future<void> _setupFCM() async {
     final messaging = FirebaseMessaging.instance;
 
-    // Richiedi permessi esplicitamente
     await messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
 
-    // Mostra la notifica anche quando l'app è in primo piano
     await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
       alert: true,
       badge: true,
       sound: true,
     );
 
-    // Gestisci messaggi quando l'app è in background/terminata
+    try {
+      final token = await messaging.getToken();
+      debugPrint('[PushServiceFCM] Token FCM ottenuto: $token');
+      if (token != null) {
+        await _updateFcmTokenInProfile(token);
+      }
+    } catch (e) {
+      debugPrint('[PushServiceFCM] Errore recupero token FCM: $e');
+    }
+
+    messaging.onTokenRefresh.listen((newToken) async {
+      debugPrint('[PushServiceFCM] Token FCM rinnovato: $newToken');
+      await _updateFcmTokenInProfile(newToken);
+    });
+
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       final payload = message.data['payload'];
       if (payload != null) {
@@ -79,19 +130,31 @@ class PushServiceFCM implements PushServiceInterface {
       }
     });
 
-    // Gestisci messaggi quando l'app è in primo piano
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-      final payload = message.data['payload'];
+      final data = message.data;
+      final payload = data['payload'];
       if (payload != null) {
-        await _notificationService.showNotification(
-          'Nuovo messaggio',
-          'Hai ricevuto un nuovo messaggio',
-          payload: payload,
-        );
+        try {
+          final decoded = json.decode(payload) as Map<String, dynamic>;
+          final senderHash = decoded['senderHash'] as String? ?? '';
+          final senderNickname = decoded['senderNickname'] as String? ?? 'Sconosciuto';
+          final content = decoded['content'] as String? ?? '';
+
+          await _notificationService.showNewMessageNotification(
+            senderHash,
+            senderNickname,
+            content,
+          );
+        } catch (_) {
+          await _notificationService.showNotification(
+            'Nuovo messaggio',
+            'Hai ricevuto un nuovo messaggio',
+            payload: payload.toString(),
+          );
+        }
       }
     });
 
-    // Gestisci messaggio iniziale (app lanciata da notifica)
     final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
     if (initialMessage != null) {
       final payload = initialMessage.data['payload'];
@@ -101,9 +164,24 @@ class PushServiceFCM implements PushServiceInterface {
     }
   }
 
+  Future<void> _updateFcmTokenInProfile(String token) async {
+    final profile = await _storageService.loadProfile();
+    if (profile != null) {
+      final updatedProfile = profile.copyWith(
+        pushProvider: 'fcm',
+        pushToken: token,
+      );
+      await _storageService.saveProfile(updatedProfile);
+      debugPrint('[PushServiceFCM] Profilo salvato con token FCM: $token');
+    }
+  }
+
   @override
   Future<String?> getPushToken() async {
     try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp();
+      }
       return await FirebaseMessaging.instance.getToken();
     } catch (e) {
       debugPrint('Errore ottenimento token FCM: $e');
@@ -126,7 +204,6 @@ class PushServiceFCM implements PushServiceInterface {
     await FirebaseMessaging.instance.deleteToken();
   }
 
-  // Callback UnifiedPush — le firme devono essere void Function(...) per UP
   void _onUnifiedPushEndpoint(PushEndpoint endpoint, String instance) {
     debugPrint('[PushServiceFCM] Nuovo endpoint UnifiedPush: ${endpoint.url}');
   }

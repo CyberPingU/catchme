@@ -13,9 +13,6 @@ import 'services/push_service.dart';
 
 // Costante compile-time: flutter build apk --dart-define=PUSH_PROVIDER=unifiedpush
 // Il progetto ora usa ESCLUSIVAMENTE UnifiedPush (FOSS).
-const _pushProvider = String.fromEnvironment('PUSH_PROVIDER', defaultValue: 'unifiedpush');
-const _useFcm = false;
-
 
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();

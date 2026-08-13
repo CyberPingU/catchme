@@ -63,15 +63,18 @@ jobs:
         run: |
           flutter build apk \
             --release \
+            --flavor fdroid \
             --dart-define=PUSH_PROVIDER=unifiedpush
-          mv build/app/outputs/flutter-apk/app-release.apk \
+          mv build/app/outputs/flutter-apk/app-fdroid-release.apk \
              build/app/outputs/flutter-apk/catchme-foss-${{ github.ref_name }}.apk
 
       # ── Build Full (se il Tag appartiene al branch 'full') ─────────────────
       - name: Write google-services.json
         if: env.IS_FULL == 'true'
         run: |
+          mkdir -p android/app/src/playstore
           echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/src/playstore/google-services.json
 
       - name: Build playstore APK
         if: env.IS_FULL == 'true'

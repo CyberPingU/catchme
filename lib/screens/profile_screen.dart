@@ -18,13 +18,13 @@ import 'package:url_launcher/url_launcher.dart';
 const _useFcmBuild = String.fromEnvironment('PUSH_PROVIDER', defaultValue: 'fcm') != 'unifiedpush';
 
 class ProfileScreen extends StatefulWidget {
-   final UserProfile? profile;
-   final Function(UserProfile)? onProfileSaved;
+  final UserProfile? profile;
+  final Function(UserProfile)? onProfileSaved;
 
-   const ProfileScreen({super.key, this.profile, this.onProfileSaved});
+  const ProfileScreen({super.key, this.profile, this.onProfileSaved});
 
-   @override
-   State<ProfileScreen> createState() => _ProfileScreenState();
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
@@ -100,7 +100,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadServerUrl();
 
     // Sottoscrivi allo stream UP endpoint: aggiorna la UI reattivamente
-    // quando onNewEndpoint arriva (risolve il glitch visivo al boot).
+    // quando onNewEndpoint arrives (risolve il glitch visivo al boot).
     _upEndpointSub = PushService().onUnifiedPushEndpoint.listen((endpoint) {
       if (mounted) {
         setState(() {
@@ -247,8 +247,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            success 
-                ? 'Posizione inviata con successo al server!' 
+            success  
+                ? 'Posizione inviata con successo al server!'  
                 : 'Errore durante l\'invio della posizione. Verifica la connessione.',
           ),
           backgroundColor: success ? Colors.green : Colors.red,
@@ -279,19 +279,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _changePushProvider(String provider) async {
     if (provider == 'fcm') {
-      await _pushService.unregisterUnifiedPush();
-      final upEndpoint = await _pushService.getUpEndpoint();
+      await _pushService.switchToFcm();
       setState(() {
-        _selectedPushProvider = 'unifiedpush';
+        _selectedPushProvider = 'fcm';
       });
-      if (widget.profile != null) {
-        final updated = widget.profile!.copyWith(
-          pushProvider: 'unifiedpush',
-          pushToken: upEndpoint,
-        );
-        await _storageService.saveProfile(updated);
-        widget.onProfileSaved?.call(updated);
-      }
+      _bluetoothService.sendLocationUpdateManually();
     } else if (provider == 'unifiedpush') {
       if (_distributors.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -300,11 +292,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       }
       if (_distributors.length == 1) {
-        await _pushService.registerUnifiedPush(_distributors.first);
+        await _pushService.switchToUnifiedPush(_distributors.first);
         setState(() {
           _selectedPushProvider = 'unifiedpush';
           _selectedDistributor = _distributors.first;
         });
+        _bluetoothService.sendLocationUpdateManually();
       } else {
         _showDistributorDialog();
       }
@@ -322,11 +315,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             title: Text(d),
             onTap: () async {
               Navigator.pop(context);
-              await _pushService.registerUnifiedPush(d);
+              await _pushService.switchToUnifiedPush(d);
               setState(() {
                 _selectedPushProvider = 'unifiedpush';
                 _selectedDistributor = d;
               });
+              _bluetoothService.sendLocationUpdateManually();
             },
           )).toList(),
         ),
@@ -413,12 +407,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return;
       }
     }
-
-    String? token = widget.profile?.pushToken;
-    if (token == null && _selectedPushProvider == 'fcm') {
-      token = await _pushService.getUpEndpoint();
-    }
-
+    String? token = await _pushService.getPushToken();
     final profile = UserProfile(
       nickname: _nicknameController.text.trim(),
       status: _selectedStatus,
@@ -437,6 +426,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     
     // Notifica il parent del cambiamento
     widget.onProfileSaved?.call(profile);
+    _bluetoothService.sendLocationUpdateManually();
     
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -714,16 +704,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onChanged: (v) => setState(() => _selectedStatus = v!),
             ),
             const SizedBox(height: 16),
-             TextFormField(
-               controller: _ageController,
-               readOnly: true,
-               decoration: const InputDecoration(
-                 labelText: 'Data di Nascita',
-                 border: OutlineInputBorder(),
-                 prefixIcon: Icon(Icons.cake),
-               ),
-               onTap: () => _selectBirthDate(context),
-             ),
+            TextFormField(
+              controller: _ageController,
+              readOnly: true,
+              decoration: const InputDecoration(
+                labelText: 'Data di Nascita',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.cake),
+              ),
+              onTap: () => _selectBirthDate(context),
+            ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               initialValue: _selectedGender,
@@ -771,178 +761,179 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 return null;
               },
             ),
-             const SizedBox(height: 32),
-             // Sezione Impostazioni App
-             const Text(
-               'Impostazioni App',
-               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-             ),
-             const SizedBox(height: 16),
-             Card(
-               child: Column(
-                 children: [
-                   SwitchListTile(
-                     title: const Text('Localizzazione in background'),
-                     subtitle: const Text('Aggiorna la posizione ogni 5 minuti a schermo spento'),
-                     value: _isBackgroundSyncEnabled,
-                     onChanged: _toggleBackgroundSync,
-                     secondary: const Icon(Icons.location_on),
-                   ),
-                   const Divider(height: 1),
-                   ListTile(
-                     leading: const Icon(Icons.my_location),
-                     title: const Text('Invia posizione ora'),
-                     subtitle: const Text('Aggiorna manualmente le tue coordinate sul server'),
-                     trailing: _isSendingLocation
-                         ? const SizedBox(
-                             width: 20,
-                             height: 20,
-                             child: CircularProgressIndicator(strokeWidth: 2),
-                           )
-                         : const Icon(Icons.send),
-                     onTap: _isSendingLocation ? null : _sendLocationManually,
-                   ),
-                   const Divider(height: 1),
-                   ListTile(
-                      leading: const Icon(Icons.notifications),
-                      title: const Text('Provider Notifiche Push'),
-                      subtitle: _isPushLoading
-                          ? const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  width: 12, height: 12,
-                                  child: CircularProgressIndicator(strokeWidth: 1.5),
-                                ),
-                                SizedBox(width: 6),
-                                Text('Inizializzazione Push...'),
-                              ],
-                            )
-                          : Text(_selectedPushProvider == 'fcm'
-                              ? 'Google FCM (Firebase)'
-                              : _upEndpoint != null
-                                  ? 'UnifiedPush — Attivo ✓'
-                                  : 'UnifiedPush (${_selectedDistributor ?? "Seleziona..."})'),
-                      trailing: _useFcmBuild
-                          ? DropdownButton<String>(
-                              value: _selectedPushProvider,
-                              underline: const SizedBox(),
-                              icon: const Icon(Icons.arrow_drop_down),
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'fcm',
-                                  child: Text('Google FCM'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'unifiedpush',
-                                  child: Text('UnifiedPush'),
-                                ),
-                              ],
-                              onChanged: (v) {
-                                if (v != null) {
-                                  _changePushProvider(v);
-                                }
-                              },
-                            )
-                          : const Text('UnifiedPush', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
-                      onTap: !_useFcmBuild
-                          ? () {
-                              if (_distributors.length > 1) {
-                                _showDistributorDialog();
-                              } else if (_distributors.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Nessun distributore UnifiedPush (es. ntfy) rilevato sul dispositivo.')),
-                                );
+            const SizedBox(height: 32),
+            // Sezione Impostazioni App
+            const Text(
+              'Impostazioni App',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text('Localizzazione in background'),
+                    subtitle: const Text('Aggiorna la posizione ogni 5 minuti a schermo spento'),
+                    value: _isBackgroundSyncEnabled,
+                    onChanged: _toggleBackgroundSync,
+                    secondary: const Icon(Icons.location_on),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.my_location),
+                    title: const Text('Invia posizione ora'),
+                    subtitle: const Text('Aggiorna manualmente le tue coordinate sul server'),
+                    trailing: _isSendingLocation
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send),
+                    onTap: _isSendingLocation ? null : _sendLocationManually,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.notifications),
+                    title: const Text('Provider Notifiche Push'),
+                    subtitle: _isPushLoading
+                        ? const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 12, height: 12,
+                                child: CircularProgressIndicator(strokeWidth: 1.5),
+                              ),
+                              SizedBox(width: 6),
+                              Text('Inizializzazione Push...'),
+                            ],
+                          )
+                        : Text(_selectedPushProvider == 'fcm'
+                            ? 'Google FCM (Firebase)'
+                            : _upEndpoint != null
+                                ? 'UnifiedPush — Attivo ✓'
+                                : 'UnifiedPush (${_selectedDistributor ?? "Seleziona..."})'),
+                    trailing: _useFcmBuild
+                        ? DropdownButton<String>(
+                            value: _selectedPushProvider,
+                            underline: const SizedBox(),
+                            icon: const Icon(Icons.arrow_drop_down),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'fcm',
+                                child: Text('Google FCM'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'unifiedpush',
+                                child: Text('UnifiedPush'),
+                              ),
+                            ],
+                            onChanged: (v) {
+                              if (v != null) {
+                                _changePushProvider(v);
                               }
+                            },
+                          )
+                        : const Text('UnifiedPush', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                    onTap: !_useFcmBuild
+                        ? () {
+                            if (_distributors.length > 1) {
+                              _showDistributorDialog();
+                            } else if (_distributors.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Nessun distributore UnifiedPush (es. ntfy) rilevato sul dispositivo.')),
+                              );
                             }
-                          : null,
-                    ),           const Divider(height: 1),
-                     ListTile(
-                       leading: const Icon(Icons.check_circle_outline, color: Colors.green),
-                       title: const Text('Testa Notifiche Push'),
-                       subtitle: const Text('Invia una notifica di prova al tuo dispositivo'),
-                       trailing: const Icon(Icons.play_arrow),
-                       onTap: _sendTestPush,
-                     ),
-                    // Banner stato UnifiedPush — reattivo, non mostra falsi errori al boot
-                    if (_selectedPushProvider == 'unifiedpush' && !_isPushLoading) ...[
-                      const Divider(height: 1),
-                      if (_upEndpoint != null)
-                        // Endpoint registrato correttamente → banner verde
-                        Container(
-                          margin: const EdgeInsets.all(12),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.green, width: 1),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(Icons.check_circle, color: Colors.green, size: 20),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'UnifiedPush attivo. Endpoint registrato correttamente.',
-                                  style: TextStyle(fontSize: 12, color: Colors.green.shade800),
-                                ),
+                          }
+                        : null,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+                    title: const Text('Testa Notifiche Push'),
+                    subtitle: const Text('Invia una notifica di prova al tuo dispositivo'),
+                    trailing: const Icon(Icons.play_arrow),
+                    onTap: _sendTestPush,
+                  ),
+                  // Banner stato UnifiedPush — reattivo, non mostra falsi errori al boot
+                  if (_selectedPushProvider == 'unifiedpush' && !_isPushLoading) ...[
+                    const Divider(height: 1),
+                    if (_upEndpoint != null)
+                      // Endpoint registrato correttamente → banner verde
+                      Container(
+                        margin: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green, width: 1),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'UnifiedPush attivo. Endpoint registrato correttamente.',
+                                style: TextStyle(fontSize: 12, color: Colors.green.shade800),
                               ),
-                            ],
-                          ),
-                        )
-                      else
-                        // Endpoint non ancora ricevuto → banner avviso/errore
-                        Container(
-                          margin: const EdgeInsets.all(12),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: _useFcmBuild
-                                ? Colors.orange.withValues(alpha: 0.1)
-                                : Colors.red.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: _useFcmBuild ? Colors.orange : Colors.red,
-                              width: 1,
                             ),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                _useFcmBuild ? Icons.info_outline : Icons.warning_amber,
-                                color: _useFcmBuild ? Colors.orange : Colors.red,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _useFcmBuild
-                                      ? 'UnifiedPush richiede ntfy o un altro distributore installato sul dispositivo. In assenza, verrà usato FCM automaticamente.'
-                                      : 'Questa versione (F-Droid) usa solo UnifiedPush. Senza ntfy installato, le notifiche non funzioneranno quando l\'app è chiusa.',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: _useFcmBuild
-                                        ? Colors.orange.shade800
-                                        : Colors.red.shade800,
-                                  ),
-                                ),
-                              ),
-                            ],
+                          ],
+                        ),
+                      )
+                    else
+                      // Endpoint non ancora ricevuto → banner avviso/errore
+                      Container(
+                        margin: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: _useFcmBuild
+                              ? Colors.orange.withValues(alpha: 0.1)
+                              : Colors.red.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _useFcmBuild ? Colors.orange : Colors.red,
+                            width: 1,
                           ),
                         ),
-                    ],
-                 ],
-               ),
-             ),
-             const SizedBox(height: 32),
-             // Sezione Sicurezza
-             const Text(
-               'Sicurezza',
-               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-             ),
-             const SizedBox(height: 16),
-             Card(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              _useFcmBuild ? Icons.info_outline : Icons.warning_amber,
+                              color: _useFcmBuild ? Colors.orange : Colors.red,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _useFcmBuild
+                                    ? 'UnifiedPush richiede ntfy o un altro distributore installato sul dispositivo. In assenza, verrà usato FCM automaticamente.'
+                                    : 'Questa versione (F-Droid) usa solo UnifiedPush. Senza ntfy installato, le notifiche non funzioneranno quando l\'app è chiusa.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: _useFcmBuild
+                                      ? Colors.orange.shade800
+                                      : Colors.red.shade800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+            // Sezione Sicurezza
+            const Text(
+              'Sicurezza',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Card(
               child: Column(
                 children: [
                   SwitchListTile(
@@ -968,94 +959,94 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
-             const SizedBox(height: 32),
-             // Sezione Impostazioni Avanzate (accordion)
-             Theme(
-               data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-               child: ExpansionTile(
-                 leading: const Icon(Icons.settings_applications),
-                 title: const Text(
-                   'Impostazioni Avanzate',
-                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                 ),
-                 initiallyExpanded: _isAdvancedExpanded,
-                 onExpansionChanged: (v) => setState(() => _isAdvancedExpanded = v),
-                 children: [
-                   Padding(
-                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                     child: Column(
-                       crossAxisAlignment: CrossAxisAlignment.start,
-                       children: [
-                         const Text(
-                           'URL Server WebSocket',
-                           style: TextStyle(fontWeight: FontWeight.w500),
-                         ),
-                         const SizedBox(height: 4),
-                         Text(
-                           'Default: $_defaultServerUrl',
-                           style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                         ),
-                         const SizedBox(height: 8),
-                         Row(
-                           children: [
-                             Expanded(
-                               child: TextField(
-                                 controller: _serverUrlController,
-                                 decoration: InputDecoration(
-                                   hintText: _defaultServerUrl,
-                                   border: const OutlineInputBorder(),
-                                   contentPadding: const EdgeInsets.symmetric(
-                                     horizontal: 12, vertical: 10),
-                                   isDense: true,
-                                 ),
-                                 keyboardType: TextInputType.url,
-                                 autocorrect: false,
-                                 style: const TextStyle(fontSize: 13),
-                               ),
-                             ),
-                             const SizedBox(width: 8),
-                             ElevatedButton(
-                               onPressed: () => _saveServerUrl(_serverUrlController.text),
-                               child: const Text('Salva'),
-                             ),
-                           ],
-                         ),
-                         const SizedBox(height: 4),
-                         TextButton.icon(
-                           icon: const Icon(Icons.restore, size: 16),
-                           label: const Text('Ripristina default', style: TextStyle(fontSize: 12)),
-                           onPressed: () {
-                             _serverUrlController.clear();
-                             _saveServerUrl('');
-                           },
-                         ),
-                       ],
-                     ),
-                   ),
-                 ],
-               ),
-             ),
-             const SizedBox(height: 32),
-             // Sezione Informazioni
-             const Text(
-               'Informazioni',
-               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-             ),
-             const SizedBox(height: 16),
-             Card(
-               child: ListTile(
-                 leading: const Icon(Icons.info),
-                 title: const Text('Informazioni su CatchMe'),
-                 subtitle: const Text('Autore, versione e contatti'),
-                 trailing: const Icon(Icons.chevron_right),
-                 onTap: _showAboutDialog,
-               ),
-             ),
-           ],
-         ),
-       ),
-     );
-   }
+            const SizedBox(height: 32),
+            // Sezione Impostazioni Avanzate (accordion)
+            Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                leading: const Icon(Icons.settings_applications),
+                title: const Text(
+                  'Impostazioni Avanzate',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                initiallyExpanded: _isAdvancedExpanded,
+                onExpansionChanged: (v) => setState(() => _isAdvancedExpanded = v),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'URL Server WebSocket',
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Default: $_defaultServerUrl',
+                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _serverUrlController,
+                                decoration: const InputDecoration(
+                                  hintText: _defaultServerUrl,
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 10),
+                                  isDense: true,
+                                ),
+                                keyboardType: TextInputType.url,
+                                autocorrect: false,
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: () => _saveServerUrl(_serverUrlController.text),
+                              child: const Text('Salva'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        TextButton.icon(
+                          icon: const Icon(Icons.restore, size: 16),
+                          label: const Text('Ripristina default', style: TextStyle(fontSize: 12)),
+                          onPressed: () {
+                            _serverUrlController.clear();
+                            _saveServerUrl('');
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+            // Sezione Informazioni
+            const Text(
+              'Informazioni',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.info),
+                title: const Text('Informazioni su CatchMe'),
+                subtitle: const Text('Autore, versione e contatti'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _showAboutDialog,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   void _showAboutDialog() {
     showDialog(
