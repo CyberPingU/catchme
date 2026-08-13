@@ -1,0 +1,10 @@
+CatchMe is an open-source, end-to-end encrypted messaging application with proximity discovery capabilities.
+
+Discover and chat with nearby people without ever sharing your identity, phone number, or exact location with a central server.
+
+Features:
+- End-to-end encrypted messaging (ECDH X25519 + AES-GCM)
+- Proximity discovery via GPS and WebSocket server relay
+- 100% FOSS flavor with UnifiedPush support (no Google Play Services needed)
+- No account, no phone number, no tracking
+- Self-hostable backend support
