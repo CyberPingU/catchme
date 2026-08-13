@@ -291,7 +291,7 @@ class ProximityService {
 
   Future<void> _fetchAndSendCurrentLocation() async {
     try {
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.balanced);
       if (_isConnected && _channel != null) {
         final sharingWith = await _getSharingWithList();
         final payload = {
@@ -316,7 +316,7 @@ class ProximityService {
     if (!_isConnected || _channel == null) return;
 
     try {
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.balanced);
       final sharingWith = await _getSharingWithList();
       final payload = {
         'type': 'location_update',
@@ -878,7 +878,7 @@ class ProximityService {
         await Future.delayed(const Duration(milliseconds: 1000));
       }
       
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.blanced);
       final sharingWith = await _getSharingWithList();
       final payload = {
         'type': 'location_update',
