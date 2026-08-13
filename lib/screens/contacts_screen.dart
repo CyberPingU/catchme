@@ -440,8 +440,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
                                           children: [
                                             CircleAvatar(
                                               radius: 20,
-                                              backgroundImage: contact.avatarPath != null
-                                                  ? FileImage(File(contact.avatarPath!))
+					      backgroundImage: (contact.avatarPath != null && File(contact.avatarPath!).existsSync())
+    					          ? FileImage(File(contact.avatarPath!)) 
                                                   : null,
                                               child: contact.avatarPath == null
                                                   ? Text(

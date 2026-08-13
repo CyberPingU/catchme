@@ -205,7 +205,9 @@ class _UserProfileCardState extends State<UserProfileCard> {
                   CircleAvatar(
                     radius: 70,
                     backgroundColor: theme.colorScheme.primaryContainer,
-                    backgroundImage: _avatarPath != null ? FileImage(File(_avatarPath!)) : null,
+		    backgroundImage: (_avatarPath != null && File(_avatarPath!).existsSync()) 
+    		      ? FileImage(File(_avatarPath!)) 
+    		      : null,
                     child: _avatarPath == null
                         ? Text(
                             user.nickname[0].toUpperCase(),
